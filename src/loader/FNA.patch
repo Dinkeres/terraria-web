@@ -76,15 +76,25 @@ index 6e3e261..eecb10a 100644
  			{
  				SetEnv = SDL3_FNAPlatform.SetEnv;
 diff --git a/src/FNAPlatform/SDL3_FNAPlatform.cs b/src/FNAPlatform/SDL3_FNAPlatform.cs
-index 32e070b..2b911c6 100644
+index 32e070b..924bef3 100644
 --- a/src/FNAPlatform/SDL3_FNAPlatform.cs
 +++ b/src/FNAPlatform/SDL3_FNAPlatform.cs
-@@ -1221,22 +1221,44 @@ namespace Microsoft.Xna.Framework
+@@ -1202,6 +1202,8 @@ namespace Microsoft.Xna.Framework
+ 			if (SDL.SDL_GetPlatform().Equals("Emscripten"))
+ 			{
+ 				emscriptenGame = game;
++				/* Terraria Web: keep SDL text input on in the browser; games only read it while a text box is open. */
++				Input.TextInputEXT.StartTextInput();
+ 				emscripten_set_main_loop(
+ 					RunEmscriptenMainLoop,
+ 					0,
+@@ -1221,22 +1223,48 @@ namespace Microsoft.Xna.Framework
  		#region Emscripten Main Loop
  
  		private static Game emscriptenGame;
 +		private static int fpsFrames;
-+		private static bool debugMouseDown;
++		private static bool debugMouseDown, debugTextHooked;
++		private static int debugKeys;
 +		private static readonly System.Diagnostics.Stopwatch fpsTimer = System.Diagnostics.Stopwatch.StartNew();
  		private delegate void em_callback_func();
  
@@ -115,6 +125,9 @@ index 32e070b..2b911c6 100644
 +				emscriptenGame.RunOneFrame();
 +				fpsFrames += 1;
 +				bool down = Input.Mouse.GetState().LeftButton == Input.ButtonState.Pressed;
++				int keys = Input.Keyboard.GetState().GetPressedKeys().Length;
++				if (keys != debugKeys) { debugKeys = keys; System.Console.WriteLine("[input] keys " + string.Join(",", Input.Keyboard.GetState().GetPressedKeys())); }
++				if (!debugTextHooked) { debugTextHooked = true; Input.TextInputEXT.TextInput += c => System.Console.WriteLine("[input] text " + c); }
 +				if (down != debugMouseDown) { debugMouseDown = down; System.Console.WriteLine("[input] left " + (down ? "down" : "up") + " " + Input.Mouse.GetState()); }
 +				if (fpsTimer.ElapsedMilliseconds >= 5000)
 +				{

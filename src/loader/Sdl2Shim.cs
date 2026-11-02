@@ -49,11 +49,8 @@ public static class Sdl2Shim
         return 0;
     }
 
-    public static void SDL_StartTextInput()
-    {
-        var w = S3.SDL_GetKeyboardFocus();
-        if (w != IntPtr.Zero) S3.SDL_StartTextInput(w);
-    }
+    // FNA knows the game window (SDL3 keyboard focus is unset in the browser).
+    public static void SDL_StartTextInput() => Microsoft.Xna.Framework.Input.TextInputEXT.StartTextInput();
 
     public static string SDL_GetClipboardText() => S3.SDL_GetClipboardText();
     public static int SDL_SetClipboardText(string text) => S3.SDL_SetClipboardText(text) ? 0 : -1;

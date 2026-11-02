@@ -13,6 +13,8 @@ static class Patches
         ["tModLoader"] = m =>
         {
             Common(m);
+            // Locals typed as sealed RijndaelManaged make the interpreter devirtualize calls onto ManagedAes; widen them.
+            RetypeLocals(m, "System.Security.Cryptography.RijndaelManaged", typeof(System.Security.Cryptography.SymmetricAlgorithm));
             // Hashes steam_api / Terraria.exe to verify a Steam or GOG install; the browser has neither.
             // The player supplied their own files, which is our ownership model.
             Stub(m, "Terraria.ModLoader.Engine.InstallVerifier", ".cctor");
@@ -49,6 +51,8 @@ static class Patches
             ("System.Diagnostics.Process", "get_PrivateMemorySize64" or "get_WorkingSet64") => shim.GetMethod(nameof(Shim.ProcessMemory)),
             ("System.Diagnostics.Process", "Refresh") => shim.GetMethod(nameof(Shim.ProcessRefresh)),
             ("System.Diagnostics.Process", "get_Id") => shim.GetMethod(nameof(Shim.ProcessId)),
+            // No synchronous AES in browser .NET; Terraria encrypts .plr/achievements with RijndaelManaged.
+            ("System.Security.Cryptography.RijndaelManaged", ".ctor") => typeof(ManagedAes).GetMethod(nameof(ManagedAes.Create)),
             // Only SDL3 is linked in the browser build; see Sdl2Shim.
             ("SDL2.SDL", _) => typeof(Sdl2Shim).GetMethod(name)
                 ?? throw new Exception($"patch: Sdl2Shim.{name} missing (add it)"),
@@ -74,6 +78,15 @@ static class Patches
             }
             il.Emit(OpCodes.Ret);
         }
+    }
+
+    static void RetypeLocals(ModuleDefinition m, string from, Type to)
+    {
+        var target = m.ImportReference(to);
+        foreach (var t in m.GetTypes())
+            foreach (var x in t.Methods.Where(x => x.HasBody))
+                foreach (var v in x.Body.Variables)
+                    if (v.VariableType.FullName == from) v.VariableType = target;
     }
 
     // Parameterless ctor -> only call object's ctor (fields stay default).
@@ -122,7 +135,7 @@ static class Patches
                 if (!x.HasBody) continue;
                 foreach (var ins in x.Body.Instructions)
                 {
-                    bool isCall = ins.OpCode == OpCodes.Call || ins.OpCode == OpCodes.Callvirt;
+                    bool isCall = ins.OpCode == OpCodes.Call || ins.OpCode == OpCodes.Callvirt || ins.OpCode == OpCodes.Newobj; // newobj -> static factory
                     if ((!isCall && ins.OpCode != OpCodes.Ldftn) || ins.Operand is not MethodReference r) continue;
                     var key = (r.DeclaringType.FullName, r.Name);
                     if (!cache.TryGetValue(key, out var target))

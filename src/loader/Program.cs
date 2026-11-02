@@ -69,6 +69,12 @@ partial class Program
             // back onto this thread, which deadlocks when the game blocks on a Task (e.g. .Wait()).
             System.Threading.SynchronizationContext.SetSynchronizationContext(null);
             if (argv.Contains("-watch")) WatchGameState(tml);
+            if (argv.Contains("-watch")) AppDomain.CurrentDomain.FirstChanceException += (_, e) =>
+            {
+                if (e.Exception is not NullReferenceException) return;
+                var frames = new System.Diagnostics.StackTrace(e.Exception).GetFrames().Take(3);
+                Console.WriteLine("[nre] " + string.Join(" <- ", frames.Select(f => $"{f.GetMethod()?.DeclaringType?.Name}.{f.GetMethod()?.Name}@IL_{f.GetILOffset():x4}")));
+            };
             main.Invoke(null, new object[] { argv });
             Console.WriteLine("MonoLaunch.Main returned (game exited)");
         }
