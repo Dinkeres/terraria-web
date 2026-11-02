@@ -28,6 +28,9 @@
 		<EmccLinkOptimizationFlag>-O3</EmccLinkOptimizationFlag>
 		<EmccCompileOptimizationFlag>-O3</EmccCompileOptimizationFlag>
 		<EmccEnvironment>web,worker</EmccEnvironment>
+		<!-- Terraria + tModLoader need well over the 2 GB default -->
+		<EmccMaximumHeapSize>4294901760</EmccMaximumHeapSize>
+		<AssemblyName>TerrariaWebLoader</AssemblyName>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -43,6 +46,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include=".\FNA\FNA.Core.csproj" />
+		<PackageReference Include="Mono.Cecil" Version="0.11.6" />
 		<None Remove=".\FNA\**" />
 		<Compile Remove=".\FNA\**" />
 		<Content Remove=".\FNA\**" />

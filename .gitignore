@@ -22,3 +22,5 @@ test-results/
 # test artifacts
 *.png
 !src/**/*.png
+.pw-profile/
+!docs/*.png

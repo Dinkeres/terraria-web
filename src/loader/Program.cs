@@ -1,164 +1,167 @@
 using System;
-using System.Reflection;
-using System.Threading.Tasks;
-using System.Runtime.InteropServices.JavaScript;
-using System.Runtime.InteropServices;
+using System.Collections.Generic;
 using System.IO;
-using Microsoft.Xna.Framework;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.JavaScript;
+using System.Runtime.Loader;
+using System.Threading.Tasks;
+using Mono.Cecil;
+using Mono.Cecil.Cil;
 
 [assembly: System.Runtime.Versioning.SupportedOSPlatform("browser")]
 
-public class FNAGame : Game
-{
-    public FNAGame()
-    {
-        GraphicsDeviceManager gdm = new GraphicsDeviceManager(this);
-
-        // Typically you would load a config here...
-        gdm.PreferredBackBufferWidth = 512;
-        gdm.PreferredBackBufferHeight = 512;
-        gdm.IsFullScreen = false;
-        gdm.SynchronizeWithVerticalRetrace = true;
-    }
-
-    byte r = 0;
-    byte g = 0;
-    byte b = 0;
-    DateTime lastUpdate = DateTime.UnixEpoch;
-    int updateCount = 0;
-
-    protected override void Initialize()
-    {
-        /* This is a nice place to start up the engine, after
-		 * loading configuration stuff in the constructor
-		 */
-        base.Initialize();
-    }
-
-    protected override void LoadContent()
-    {
-        // Load textures, sounds, and so on in here...
-        base.LoadContent();
-    }
-
-    protected override void UnloadContent()
-    {
-        // Clean up after yourself!
-        base.UnloadContent();
-    }
-
-    protected override void Update(GameTime gameTime)
-    {
-        // Run game logic in here. Do NOT render anything here!
-        base.Update(gameTime);
-        updateCount++;
-        DateTime now = DateTime.UtcNow;
-        if ((now - lastUpdate).TotalSeconds > 1.0)
-        {
-            Console.WriteLine($"Main loop still running at: {now}; {Math.Round(updateCount / (now - lastUpdate).TotalSeconds, MidpointRounding.AwayFromZero)} UPS");
-            lastUpdate = now;
-            updateCount = 0;
-        }
-        if (r != 255)
-        {
-            r++;
-            return;
-        }
-        if (g != 255)
-        {
-            g++;
-            return;
-        }
-        if (b != 255)
-        {
-            b++;
-            return;
-        }
-        r = 0;
-        g = 0;
-        b = 0;
-    }
-
-    protected override void Draw(GameTime gameTime)
-    {
-        // Render stuff in here. Do NOT run game logic in here!
-        GraphicsDevice.Clear(new Color(r, g, b));
-        base.Draw(gameTime);
-    }
-}
-
+// Loads the player's own tModLoader from OPFS (/libsdl) and runs its unmodified launcher.
+// Desktop-only bits are patched in memory with Cecil (see Patches.cs); nothing is written back.
 partial class Program
 {
-    private static void Main()
-    {
-        Console.WriteLine("Hi!");
-    }
+    const string Root = "/libsdl";
+    // WASMFS getcwd() drops the /libsdl mount prefix, so game paths live at /tModLoader and /Terraria
+    // (symlinks into OPFS); that keeps relative paths like ../Terraria/Content working.
+    const string TmlDir = "/tModLoader";
+
+    private static void Main() => Console.WriteLine("Terraria Web loader ready");
 
     [DllImport("Emscripten")]
     public extern static int mount_opfs();
 
-    static FNAGame game;
-    static FieldInfo RunApplication;
-    public static bool firstLaunch = true;
-
     [JSExport]
-    internal static Task PreInit()
+    internal static Task PreInit() => Task.Run(() =>
     {
-        return Task.Run(() =>
-        {
-            Console.WriteLine("calling mount_opfs");
-            int ret = mount_opfs();
-            Console.WriteLine($"called mount_opfs: {ret}");
-            if (ret != 0)
-            {
-                throw new Exception("Failed to mount OPFS");
-            }
+        if (mount_opfs() != 0) throw new Exception("Failed to mount OPFS");
+        foreach (var dir in new[] { "tModLoader", "Terraria" })
+            if (!Directory.Exists("/" + dir)) Directory.CreateSymbolicLink("/" + dir, Root + "/" + dir);
+        Environment.SetEnvironmentVariable("FNA_PLATFORM_BACKEND", "SDL3");
+    });
 
-            Environment.SetEnvironmentVariable("FNA_PLATFORM_BACKEND", "SDL3");
-        });
-    }
+    static Dictionary<string, string> libraryIndex;
+    static RefResolver resolver;
 
     [JSExport]
-    internal static Task Init()
-    {
-        // Any init for the Game - usually before game.Run() in the decompilation
-		Console.WriteLine($"read test.txt from opfs: {File.ReadAllText("/libsdl/test.txt")}");
-        game = new FNAGame();
-		RunApplication = game.GetType().GetField("RunApplication", BindingFlags.NonPublic | BindingFlags.Instance);
-        return Task.Delay(0);
-    }
-
-    // Experiment: does FNA's emscripten main-loop handoff unwind out of Run() without running finally/Dispose?
-    [JSExport]
-    internal static Task RunBlocking()
-    {
-        Console.WriteLine("RunBlocking: calling game.Run() inside using/finally");
-        try { using (game) { game.Run(); } Console.WriteLine("AFTER RUN (returned normally)"); }
-        catch (Exception e) { Console.WriteLine("CAUGHT: " + e); }
-        finally { Console.WriteLine("FINALLY RAN"); }
-        return Task.CompletedTask;
-    }
-
-    [JSExport]
-    internal static Task<bool> Cleanup()
-    {
-        // Any cleanup for the Game - usually after game.Run() in the decompilation
-        return Task.FromResult(true);
-    }
-
-    [JSExport]
-    internal static Task<bool> MainLoop()
+    internal static Task Launch(string args)
     {
         try
         {
-            game.RunOneFrame();
+            Directory.SetCurrentDirectory(TmlDir);
+            // Loader-only option: -trace=Prefix1,Prefix2 (see Patches.Trace)
+            foreach (var a in args.Split(' ').Where(a => a.StartsWith("-trace=")))
+                Environment.SetEnvironmentVariable("TW_TRACE", a["-trace=".Length..]);
+            args = string.Join(' ', args.Split(' ').Where(a => !a.StartsWith("-trace=")));
+            IndexLibraries();
+            if (args.Contains("-fsbench")) { var sw = System.Diagnostics.Stopwatch.StartNew(); int n = 0; foreach (var f in Directory.EnumerateFiles("../Terraria/Content/Images", "*.xnb", SearchOption.AllDirectories)) if (++n % 1000 == 0) Console.WriteLine($"fsbench {n} files {sw.ElapsedMilliseconds} ms"); Console.WriteLine($"fsbench done {n} files {sw.ElapsedMilliseconds} ms"); }
+            resolver = new RefResolver();
+            foreach (var dir in libraryIndex.Values.Select(Path.GetDirectoryName).Distinct())
+                resolver.AddSearchDirectory(dir);
+            resolver.AddSearchDirectory(TmlDir);
+            if (args.Contains("-loadtest")) LoadTest(libraryIndex["Steamworks.NET"]);
+
+            AssemblyLoadContext.Default.Resolving += (ctx, name) =>
+                libraryIndex.TryGetValue(name.Name, out var path) ? Load(path) : null;
+
+            var tml = Load(TmlDir + "/tModLoader.dll");
+            var main = tml.GetType("Terraria.MonoLaunch", true)
+                .GetMethod("Main", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+            var argv = args.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            Console.WriteLine($"Calling MonoLaunch.Main({string.Join(" ", argv)}) on {RuntimeInformation.FrameworkDescription}");
+            // On success this never returns: FNA's Game.Run() unwinds into the browser frame loop.
+            // Desktop main threads have no SynchronizationContext. The browser one would capture async continuations
+            // back onto this thread, which deadlocks when the game blocks on a Task (e.g. .Wait()).
+            System.Threading.SynchronizationContext.SetSynchronizationContext(null);
+            main.Invoke(null, new object[] { argv });
+            Console.WriteLine("MonoLaunch.Main returned (game exited)");
         }
         catch (Exception e)
         {
-            Console.Error.WriteLine("Error in MainLoop()!");
-            Console.Error.WriteLine(e);
-            return (Task<bool>)Task.FromException(e);
+            Console.Error.WriteLine("Launch failed:\n" + (e is TargetInvocationException t ? t.InnerException : e));
+            return Task.FromException(e);
         }
-        return Task.FromResult((bool)RunApplication.GetValue(game));
+        return Task.CompletedTask;
+    }
+
+    static void IndexLibraries()
+    {
+        libraryIndex = new(StringComparer.OrdinalIgnoreCase);
+        // Like the desktop host's deps.json resolution for a Linux RID: runtimes/linux/lib/* beats lib/*
+        // (some lib/ copies, e.g. Steamworks.NET, are reference assemblies that can't execute).
+        var all = Directory.EnumerateFiles(TmlDir + "/Libraries", "*.dll", SearchOption.AllDirectories)
+            .Where(p => !p.Contains("/Native/") && (!p.Contains("/runtimes/") || p.Contains("/runtimes/linux/lib/")))
+            .OrderBy(p => p.Contains("/runtimes/linux/lib/") ? 0 : 1);
+        foreach (var path in all)
+        {
+            var name = Path.GetFileNameWithoutExtension(path);
+            if (name == "FNA") continue; // ours (browser build) is already loaded
+            libraryIndex.TryAdd(name, path);
+        }
+        Console.WriteLine($"Indexed {libraryIndex.Count} libraries");
+    }
+
+    static Assembly Load(string path)
+    {
+        var name = Path.GetFileNameWithoutExtension(path);
+        var traced = (Environment.GetEnvironmentVariable("TW_TRACE") ?? "").Split(',').Any(p => p.Length > 0 && name.StartsWith(p.Split('.')[0]));
+        if (!Patches.ByAssembly.TryGetValue(name, out var patch) && !traced)
+            return AssemblyLoadContext.Default.LoadFromAssemblyPath(path);
+        patch ??= _ => { };
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        using var module = ModuleDefinition.ReadModule(path, new ReaderParameters { AssemblyResolver = resolver, InMemory = true });
+        patch(module);
+        if (Environment.GetEnvironmentVariable("TW_TRACE") is { Length: > 0 } trace) Patches.Trace(module, trace.Split(','));
+        using var ms = new MemoryStream();
+        module.Write(ms);
+        Console.WriteLine($"Patched {name} in {sw.ElapsedMilliseconds} ms");
+        ms.Position = 0;
+        var asm = AssemblyLoadContext.Default.LoadFromStream(ms);
+        Shim.Paths[asm] = path;
+        return asm;
+    }
+
+    // Cecil needs the .NET reference assemblies to write modules; in the browser they aren't files.
+    // The player's tModLoader ships them as resources of Basic.Reference.Assemblies.Net80.dll.
+    sealed class RefResolver : DefaultAssemblyResolver
+    {
+        Assembly refs;
+        public override AssemblyDefinition Resolve(AssemblyNameReference name, ReaderParameters parameters)
+        {
+            try { return base.Resolve(name, parameters); }
+            catch (AssemblyResolutionException)
+            {
+                refs ??= AssemblyLoadContext.Default.LoadFromAssemblyPath(libraryIndex["Basic.Reference.Assemblies.Net80"]);
+                var s = refs.GetManifestResourceStream("net80." + name.Name);
+                if (s == null) throw;
+                parameters ??= new ReaderParameters();
+                parameters.AssemblyResolver = this;
+                var def = AssemblyDefinition.ReadAssembly(s, parameters);
+                RegisterAssembly(def);
+                return def;
+            }
+        }
+    }
+
+    // Debug: find which feature of an assembly browser Mono rejects (BadImageFormat).
+    static void LoadTest(string path)
+    {
+        var variants = new (string, Action<ModuleDefinition>)[]
+        {
+            ("list", m => Console.WriteLine("loadtest asm attrs: " + string.Join(", ", m.Assembly.CustomAttributes.Select(c => c.AttributeType.FullName)) + " | module: " + string.Join(", ", m.CustomAttributes.Select(c => c.AttributeType.FullName)))),
+            ("no-asm-attrs", m => { m.Assembly.CustomAttributes.Clear(); m.CustomAttributes.Clear(); }),
+            ("no-custom-attrs", m => { m.Assembly.CustomAttributes.Clear(); m.CustomAttributes.Clear(); foreach (var t in m.GetTypes()) { t.CustomAttributes.Clear(); foreach (var x in t.Methods) { x.CustomAttributes.Clear(); foreach (var pa in x.Parameters) pa.CustomAttributes.Clear(); x.MethodReturnType.CustomAttributes.Clear(); } foreach (var f in t.Fields) f.CustomAttributes.Clear(); foreach (var pr in t.Properties) pr.CustomAttributes.Clear(); } }),
+            ("no-pinvoke", m => { foreach (var t in m.GetTypes()) foreach (var x in t.Methods) if (x.IsPInvokeImpl) { x.IsPInvokeImpl = false; x.PInvokeInfo = null; x.IsPreserveSig = false; x.ImplAttributes = Mono.Cecil.MethodImplAttributes.IL; x.Body = new Mono.Cecil.Cil.MethodBody(x); x.Body.GetILProcessor().Emit(OpCodes.Ldnull); x.Body.GetILProcessor().Emit(OpCodes.Throw); } }),
+            ("no-resources", m => m.Resources.Clear()),
+            ("no-modulerefs-fnptr", m => { foreach (var t in m.GetTypes()) foreach (var x in t.Methods.ToList()) if (x.Parameters.Any(pa => pa.ParameterType.IsFunctionPointer) || x.ReturnType.IsFunctionPointer) t.Methods.Remove(x); }),
+        };
+        foreach (var (name, change) in variants)
+        {
+            try
+            {
+                using var module = ModuleDefinition.ReadModule(path, new ReaderParameters { AssemblyResolver = resolver, InMemory = true });
+                change(module);
+                var ms = new MemoryStream(); module.Write(ms); ms.Position = 0;
+                var a = new AssemblyLoadContext(name, true).LoadFromStream(ms);
+                Console.WriteLine($"loadtest {name}: OK types={a.GetTypes().Length}");
+            }
+            catch (Exception e) { Console.WriteLine($"loadtest {name}: FAIL {e.GetType().Name} {e.Message}"); }
+        }
     }
 }
