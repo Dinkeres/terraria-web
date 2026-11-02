@@ -63,7 +63,7 @@ Working in Chromium from the player's own files: tModLoader boots, loads its (bu
 main menu, settings, character creation (typing, saving with AES), world creation (small world
 ≈3 min vs ≈20 s on desktop). See DECISIONS.md for every patch and why.
 
-Speed (headless Chromium, software GPU, interpreter only): title/menu ≈10–13 game frames/s.
+Speed (interpreter only, no AOT yet): in a small world ≈50–53 game frames/s with the GPU (Chromium + ANGLE/D3D11, this PC); ≈10 with software rendering. Menus ≈45 (GPU).
 Next measurements: in-world FPS, and with the real GPU.
 
 Speed plan, in order of expected gain:

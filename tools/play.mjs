@@ -8,7 +8,7 @@ const [url, out, stepsJson = "[]"] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
 const ctx = await chromium.launchPersistentContext(".pw-profile", {
 	viewport: { width: 1280, height: 720 },
-	args: ["--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"],
+	args: process.env.GPU ? ["--use-angle=d3d11", "--enable-gpu", "--ignore-gpu-blocklist", "--enable-unsafe-webgpu"] : ["--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"],
 });
 const page = ctx.pages()[0] ?? await ctx.newPage();
 const t0 = Date.now();

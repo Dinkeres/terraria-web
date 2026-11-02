@@ -29,6 +29,9 @@ static class Patches
             // Desktop warm-up: walks every type/method to pre-JIT them. Useless under the interpreter, slow, and it
             // touches Steamworks types (BadImageFormat here) and crashes. ForceLoadThread still sets LoadedEverything.
             Stub(m, "Terraria.Program", "ForceLoadAssembly");
+            // Tries Steam's game-server API (no steam_api here); returning false pops a blocking error dialog.
+            // Return true without setting SteamAvailable, so Steam features stay off quietly.
+            Stub(m, "Terraria.Social.Steam.SteamedWraps", "TryInitViaGameServer", returnTrue: true);
         },
         ["ReLogic"] = Common,
     };
@@ -60,7 +63,7 @@ static class Patches
         });
     }
 
-    static void Stub(ModuleDefinition m, string type, string method)
+    static void Stub(ModuleDefinition m, string type, string method, bool returnTrue = false)
     {
         var t = m.GetType(type) ?? throw new Exception($"patch: type {type} not found");
         var ms = t.Methods.Where(x => x.Name == method && x.HasBody).ToList();
@@ -70,7 +73,8 @@ static class Patches
             var b = x.Body;
             b.Instructions.Clear(); b.ExceptionHandlers.Clear(); b.Variables.Clear();
             var il = b.GetILProcessor();
-            if (x.ReturnType.MetadataType != MetadataType.Void)
+            if (returnTrue) il.Emit(OpCodes.Ldc_I4_1);
+            else if (x.ReturnType.MetadataType != MetadataType.Void)
             {
                 var v = new VariableDefinition(x.ReturnType);
                 b.Variables.Add(v); b.InitLocals = true;
