@@ -32,6 +32,11 @@ partial class Program
         if (mount_opfs() != 0) throw new Exception("Failed to mount OPFS");
         foreach (var dir in new[] { "tModLoader", "Terraria" })
             if (!Directory.Exists("/" + dir)) Directory.CreateSymbolicLink("/" + dir, Root + "/" + dir);
+        // Saves (players, worlds, config, mods) go to Terraria's Linux save dir; point it into OPFS so they persist.
+        Directory.CreateDirectory(Root + "/Saves");
+        Directory.CreateDirectory("/home/web_user/.local/share");
+        if (!Directory.Exists("/home/web_user/.local/share/Terraria"))
+            Directory.CreateSymbolicLink("/home/web_user/.local/share/Terraria", Root + "/Saves");
         Environment.SetEnvironmentVariable("FNA_PLATFORM_BACKEND", "SDL3");
     });
 

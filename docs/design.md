@@ -56,3 +56,23 @@ The game calls `Game.Run()`, which never returns on desktop. In the browser FNA 
 `emscripten_set_main_loop(..., simulate_infinite_loop=1)`, which unwinds the stack back to the
 browser; `finally` blocks and `using`/Dispose above it do not run. So tModLoader's own launcher
 (`MonoLaunch.Main` → `Program.LaunchGame` → `new Main().Run()`) can be called unmodified.
+
+## Status 2026-11-02 (end of day 1)
+
+Working in Chromium from the player's own files: tModLoader boots, loads its (built-in) mod,
+main menu, settings, character creation (typing, saving with AES), world creation (small world
+≈3 min vs ≈20 s on desktop). See DECISIONS.md for every patch and why.
+
+Speed (headless Chromium, software GPU, interpreter only): title/menu ≈10–13 game frames/s.
+Next measurements: in-world FPS, and with the real GPU.
+
+Speed plan, in order of expected gain:
+1. AOT-compile what we may host: our loader, FNA, the .NET libraries (RunAOTCompilation). The game
+   itself stays interpreted (jiterpreter).
+2. Cache the patched tModLoader.dll in OPFS (Cecil currently re-patches it every start, ~5 s), and
+   cache the content image index (~35 s on OPFS).
+3. Real GPU path (WebGL2 via ANGLE) instead of software rendering in tests.
+4. Profile hot game methods; consider "partial AOT" only if a legal route exists (see NEEDS_REVIEW).
+
+Known gaps: MonoMod detours (mods with hooks — Calamity needs these), multiplayer sockets,
+opening URLs/folders, music/sound not yet verified, startup time (~90 s to menu).
