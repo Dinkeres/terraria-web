@@ -68,6 +68,7 @@ partial class Program
             // Desktop main threads have no SynchronizationContext. The browser one would capture async continuations
             // back onto this thread, which deadlocks when the game blocks on a Task (e.g. .Wait()).
             System.Threading.SynchronizationContext.SetSynchronizationContext(null);
+            if (argv.Contains("-watch")) WatchGameState(tml);
             main.Invoke(null, new object[] { argv });
             Console.WriteLine("MonoLaunch.Main returned (game exited)");
         }
@@ -163,5 +164,21 @@ partial class Program
             }
             catch (Exception e) { Console.WriteLine($"loadtest {name}: FAIL {e.GetType().Name} {e.Message}"); }
         }
+    }
+
+    // Debug (-watch): print a few of Terraria's static input/menu fields every second.
+    static void WatchGameState(Assembly tml)
+    {
+        var main = tml.GetType("Terraria.Main");
+        string[] names = { "mouseX", "mouseY", "mouseLeft", "mouseLeftRelease", "menuMode", "hasFocus", "focusMenu", "selectedMenu", "gameMenu", "screenWidth", "screenHeight", "GameUpdateCount", "_isAsyncLoadComplete", "showSplash", "updatesCountedForFPS", "drawsCountedForFPS" };
+        new System.Threading.Thread(() =>
+        {
+            while (true)
+            {
+                System.Threading.Thread.Sleep(1000);
+                try { var prog = tml.GetType("Terraria.Program"); Console.WriteLine("[watch] LoadedEverything=" + prog.GetField("LoadedEverything", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(null) + " LoadedPercentage=" + prog.GetField("LoadedPercentage", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(null) + " " + string.Join(" ", names.Select(n => n + "=" + main.GetField(n, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(null)))); }
+                catch (Exception e) { Console.WriteLine("[watch] " + e.Message); }
+            }
+        }) { IsBackground = true }.Start();
     }
 }

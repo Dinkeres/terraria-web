@@ -1,9 +1,3 @@
-			catch (Exception e)
-			{
-				FNALoggerEXT.LogError("Unhandled exception in game loop, stopping: " + e);
-				emscripten_cancel_main_loop();
-				return;
-			}
 diff --git a/FNA.Core.csproj b/FNA.Core.csproj
 index 8fb1b52..1800825 100644
 --- a/FNA.Core.csproj
@@ -82,11 +76,16 @@ index 6e3e261..eecb10a 100644
  			{
  				SetEnv = SDL3_FNAPlatform.SetEnv;
 diff --git a/src/FNAPlatform/SDL3_FNAPlatform.cs b/src/FNAPlatform/SDL3_FNAPlatform.cs
-index 32e070b..5252e85 100644
+index 32e070b..2b911c6 100644
 --- a/src/FNAPlatform/SDL3_FNAPlatform.cs
 +++ b/src/FNAPlatform/SDL3_FNAPlatform.cs
-@@ -1223,20 +1223,30 @@ namespace Microsoft.Xna.Framework
+@@ -1221,22 +1221,44 @@ namespace Microsoft.Xna.Framework
+ 		#region Emscripten Main Loop
+ 
  		private static Game emscriptenGame;
++		private static int fpsFrames;
++		private static bool debugMouseDown;
++		private static readonly System.Diagnostics.Stopwatch fpsTimer = System.Diagnostics.Stopwatch.StartNew();
  		private delegate void em_callback_func();
  
 -		[DllImport("__Native", CallingConvention = CallingConvention.Cdecl)]
@@ -95,12 +94,11 @@ index 32e070b..5252e85 100644
 -			int fps,
 -			int simulate_infinite_loop
 -		);
--
--		[DllImport("__Native", CallingConvention = CallingConvention.Cdecl)]
 +		[DllImport("Emscripten", EntryPoint = "fna_set_main_loop", CallingConvention = CallingConvention.Cdecl)]
 +		private static extern void fna_set_main_loop(em_callback_func func);
 +		private static void emscripten_set_main_loop(em_callback_func func, int fps, int simulate_infinite_loop) => fna_set_main_loop(func);
-+
+ 
+-		[DllImport("__Native", CallingConvention = CallingConvention.Cdecl)]
 +		[DllImport("Emscripten", EntryPoint = "fna_cancel_main_loop", CallingConvention = CallingConvention.Cdecl)]
  		private static extern void emscripten_cancel_main_loop();
  
@@ -115,6 +113,15 @@ index 32e070b..5252e85 100644
 +			try
 +			{
 +				emscriptenGame.RunOneFrame();
++				fpsFrames += 1;
++				bool down = Input.Mouse.GetState().LeftButton == Input.ButtonState.Pressed;
++				if (down != debugMouseDown) { debugMouseDown = down; System.Console.WriteLine("[input] left " + (down ? "down" : "up") + " " + Input.Mouse.GetState()); }
++				if (fpsTimer.ElapsedMilliseconds >= 5000)
++				{
++					System.Console.WriteLine(string.Format("[fps] {0:F1} frames/s, {1:F1} ms/frame active={2} mouse={3}", fpsFrames * 1000.0 / fpsTimer.ElapsedMilliseconds, fpsTimer.ElapsedMilliseconds / (double) fpsFrames, emscriptenGame.IsActive, Input.Mouse.GetState()));
++					fpsFrames = 0;
++					fpsTimer.Restart();
++				}
 +			}
 +			catch (Exception e)
 +			{

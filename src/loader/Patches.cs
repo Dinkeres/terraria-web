@@ -43,6 +43,12 @@ static class Patches
             ("System.Runtime.InteropServices.RuntimeInformation", "IsOSPlatform") => shim.GetMethod(nameof(Shim.IsOSPlatform)),
             ("System.OperatingSystem", "IsWindows" or "IsMacOS") => shim.GetMethod(nameof(Shim.False)),
             ("System.OperatingSystem", "IsLinux") => shim.GetMethod(nameof(Shim.True)),
+            // No OS processes in a browser. tML reads its own memory use for logs/UI: report the managed heap.
+            ("System.Diagnostics.Process", "GetCurrentProcess") => shim.GetMethod(nameof(Shim.CurrentProcess)),
+            ("System.Diagnostics.Process", "GetProcesses") => shim.GetMethod(nameof(Shim.NoProcesses)),
+            ("System.Diagnostics.Process", "get_PrivateMemorySize64" or "get_WorkingSet64") => shim.GetMethod(nameof(Shim.ProcessMemory)),
+            ("System.Diagnostics.Process", "Refresh") => shim.GetMethod(nameof(Shim.ProcessRefresh)),
+            ("System.Diagnostics.Process", "get_Id") => shim.GetMethod(nameof(Shim.ProcessId)),
             // Only SDL3 is linked in the browser build; see Sdl2Shim.
             ("SDL2.SDL", _) => typeof(Sdl2Shim).GetMethod(name)
                 ?? throw new Exception($"patch: Sdl2Shim.{name} missing (add it)"),
@@ -138,6 +144,11 @@ public static class Shim
     public static readonly System.Collections.Concurrent.ConcurrentDictionary<System.Reflection.Assembly, string> Paths = new();
     public static string Location(System.Reflection.Assembly a) => Paths.TryGetValue(a, out var p) ? p : a.Location;
     public static bool True() => true;
+    public static System.Diagnostics.Process CurrentProcess() => null; // only used with the shims below
+    public static System.Diagnostics.Process[] NoProcesses() => Array.Empty<System.Diagnostics.Process>();
+    public static long ProcessMemory(System.Diagnostics.Process p) => GC.GetTotalMemory(false);
+    public static void ProcessRefresh(System.Diagnostics.Process p) { }
+    public static int ProcessId(System.Diagnostics.Process p) => 1;
     static readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> traceCounts = new();
     static volatile string traceLast; static long traceTotal; static System.Threading.Timer traceTimer;
     public static void Trace(string method, string arg) { if (arg != null) method += "(" + arg + ")"; traceLast = method; System.Threading.Interlocked.Increment(ref traceTotal);
