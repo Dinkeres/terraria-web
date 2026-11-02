@@ -11,32 +11,86 @@ async function dirFor(root, relPath, create) {
 	return dir;
 }
 
-// Dev only: copy from the local dev server (tools/serve.py) instead of the folder picker.
-async function syncFromDevServer(name) {
+// Copy files [{rel, size, open() -> ReadableStream}] into OPFS/<name>, skipping ones already there with the same size.
+async function syncInto(name, files) {
 	const opfs = await navigator.storage.getDirectory();
 	const top = await opfs.getDirectoryHandle(name, { create: true });
-	const list = (await (await fetch(`/dev-game/${name}/__list`)).text()).split("\n").filter(Boolean);
 	let done = 0, copied = 0;
-	for (const line of list) {
-		const [size, rel] = line.split("\t");
-		const dir = await dirFor(top, rel, true);
-		const fname = rel.split("/").pop();
+	for (const f of files) {
+		const dir = await dirFor(top, f.rel, true);
+		const fname = f.rel.split("/").pop();
 		let have = -1;
 		try { have = (await (await dir.getFileHandle(fname)).getFile()).size; } catch { }
-		if (have !== Number(size)) {
-			const res = await fetch(`/dev-game/${name}/${rel.split("/").map(encodeURIComponent).join("/")}`);
+		if (have !== f.size) {
 			const w = await (await dir.getFileHandle(fname, { create: true })).createWritable();
-			await res.body.pipeTo(w);
+			await (await f.open()).pipeTo(w);
 			copied++;
 		}
-		if (++done % 200 === 0) status(`Copying ${name}: ${done}/${list.length}`);
+		if (++done % 100 === 0 || done === files.length) status(`Copying ${name}: ${done} / ${files.length} files`);
 	}
-	console.debug(`${name}: ${list.length} files, ${copied} copied`);
+	console.debug(`${name}: ${files.length} files, ${copied} copied`);
+}
+
+// Only what the browser needs from each install (same rules as tools/serve.py).
+const SKIP_TML = new Set(["dotnet", "tModPorter", "ILLogs", "tModLoader-Logs", "DedicatedServerUtils", "EmptySteamDepot", "LaunchUtils"]);
+
+async function listHandle(dirHandle, prefix = "", out = []) {
+	for await (const [n, h] of dirHandle.entries()) {
+		const rel = prefix + n;
+		if (h.kind === "directory") await listHandle(h, rel + "/", out);
+		else { const file = await h.getFile(); out.push({ rel, size: file.size, open: async () => file.stream() }); }
+	}
+	return out;
+}
+
+// The player picks their Steam "common" folder (it holds both tModLoader and Terraria).
+async function syncFromPicker() {
+	const common = await showDirectoryPicker({ id: "steam-common", mode: "read" });
+	let tml, terraria;
+	try { tml = await common.getDirectoryHandle("tModLoader"); terraria = await common.getDirectoryHandle("Terraria"); }
+	catch { throw new Error(`"${common.name}" doesn't contain both tModLoader and Terraria. Pick steamapps\\common.`); }
+	const tmlFiles = [];
+	for await (const [n, h] of tml.entries()) {
+		if (SKIP_TML.has(n)) continue;
+		if (h.kind === "directory") await listHandle(h, n + "/", tmlFiles);
+		else { const file = await h.getFile(); tmlFiles.push({ rel: n, size: file.size, open: async () => file.stream() }); }
+	}
+	await syncInto("tModLoader", tmlFiles);
+	await syncInto("Terraria", await listHandle(await terraria.getDirectoryHandle("Content"), "Content/"));
+	localStorage.setItem("tw-installed", "1");
+}
+
+// Dev only: copy from the local dev server (tools/serve.py) instead of the folder picker.
+async function syncFromDevServer(name) {
+	const list = (await (await fetch(`/dev-game/${name}/__list`)).text()).split("\n").filter(Boolean);
+	await syncInto(name, list.map((line) => {
+		const [size, rel] = line.split("\t");
+		return { rel, size: Number(size), open: async () => (await fetch(`/dev-game/${name}/${rel.split("/").map(encodeURIComponent).join("/")}`)).body };
+	}));
+}
+
+async function haveGame() {
+	try {
+		const opfs = await navigator.storage.getDirectory();
+		await (await opfs.getDirectoryHandle("tModLoader")).getFileHandle("tModLoader.dll");
+		await (await opfs.getDirectoryHandle("Terraria")).getDirectoryHandle("Content");
+		return true;
+	} catch { return false; }
 }
 
 if (params.has("dev")) {
 	await syncFromDevServer("tModLoader");
 	await syncFromDevServer("Terraria");
+} else if (!(await haveGame()) || params.has("reinstall")) {
+	const setup = document.getElementById("setup");
+	setup.hidden = false;
+	status("");
+	await new Promise((resolve) => {
+		document.getElementById("pick").onclick = async () => {
+			try { await syncFromPicker(); setup.hidden = true; resolve(); }
+			catch (e) { status(e.message); }
+		};
+	});
 }
 
 status("Starting .NET...");
