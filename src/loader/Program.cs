@@ -41,6 +41,12 @@ partial class Program
     });
 
     static Dictionary<string, string> libraryIndex;
+    static Type terrariaMain;
+
+    // Polled by the loading screen: true once Terraria has finished its own splash/loading.
+    [JSExport]
+    internal static Task<bool> IsReady() => Task.FromResult(
+        terrariaMain?.GetField("showSplash", BindingFlags.Static | BindingFlags.Public)?.GetValue(null) is false);
     static RefResolver resolver;
 
     [JSExport]
@@ -65,6 +71,7 @@ partial class Program
                 libraryIndex.TryGetValue(name.Name, out var path) ? Load(path) : null;
 
             var tml = Load(TmlDir + "/tModLoader.dll");
+            terrariaMain = tml.GetType("Terraria.Main");
             var main = tml.GetType("Terraria.MonoLaunch", true)
                 .GetMethod("Main", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
             var argv = args.Split(' ', StringSplitOptions.RemoveEmptyEntries);

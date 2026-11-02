@@ -2,8 +2,37 @@
 // Game files live in OPFS (browser storage), which C# sees at /libsdl:
 //   /libsdl/tModLoader/...        the player's tModLoader install
 //   /libsdl/Terraria/Content/...  the player's vanilla Terraria content
-const status = (t) => { const s = document.getElementById("status"); if (s) s.textContent = t; console.debug("[status] " + t); };
+const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
+const status = (t) => { $("load-stage").textContent = t; console.debug("[status] " + t); };
+const progress = (frac) => { $("load-bar").style.width = frac == null ? "" : `${Math.round(frac * 100)}%`; $("load-bar-wrap").classList.toggle("indeterminate", frac == null); };
+
+// --- cross-origin isolation (threads need SharedArrayBuffer). GitHub Pages can't send COOP/COEP headers,
+// so sw.js adds them; the first visit reloads once after the worker takes control.
+if (!crossOriginIsolated && "serviceWorker" in navigator && !params.has("nosw")) {
+	await navigator.serviceWorker.register("./sw.js");
+	if (!navigator.serviceWorker.controller) {
+		if (!sessionStorage.getItem("tw-sw-reload")) { sessionStorage.setItem("tw-sw-reload", "1"); location.reload(); }
+	}
+}
+if (!crossOriginIsolated) {
+	status("This browser blocked the setup this game needs (cross-origin isolation). Reload the page; if it keeps happening, use desktop Chrome or Edge.");
+	throw new Error("not cross-origin isolated");
+}
+sessionStorage.removeItem("tw-sw-reload");
+
+// --- loading screen: elapsed time + tips (the #ad-slot element is free for an ad unit)
+const t0 = performance.now();
+setInterval(() => { $("load-time").textContent = `${Math.floor((performance.now() - t0) / 1000)} s`; }, 1000);
+const tips = [
+	"First start takes a minute or two: your browser is preparing the whole game.",
+	"Everything runs on your device. Your game files never leave it.",
+	"Worlds and characters are saved in this browser.",
+	"Tip: bigger worlds take longer to create in the browser than on PC.",
+];
+let tip = 0;
+$("load-tip").textContent = tips[0];
+setInterval(() => { tip = (tip + 1) % tips.length; $("load-tip").textContent = tips[tip]; }, 7000);
 
 async function dirFor(root, relPath, create) {
 	let dir = root;
@@ -11,31 +40,30 @@ async function dirFor(root, relPath, create) {
 	return dir;
 }
 
+async function sizeOf(dir, name) {
+	try { return (await (await dir.getFileHandle(name)).getFile()).size; } catch { return -1; }
+}
+
 // Copy files [{rel, size, open() -> ReadableStream}] into OPFS/<name>, skipping ones already there with the same size.
 async function syncInto(name, files) {
 	const opfs = await navigator.storage.getDirectory();
 	const top = await opfs.getDirectoryHandle(name, { create: true });
-	let done = 0, copied = 0;
+	let done = 0;
 	for (const f of files) {
 		const dir = await dirFor(top, f.rel, true);
 		const fname = f.rel.split("/").pop();
-		let have = -1;
-		try { have = (await (await dir.getFileHandle(fname)).getFile()).size; } catch { }
-		if (have !== f.size) {
+		if (await sizeOf(dir, fname) !== f.size) {
 			const w = await (await dir.getFileHandle(fname, { create: true })).createWritable();
 			await (await f.open()).pipeTo(w);
-			copied++;
 		}
-		if (++done % 100 === 0 || done === files.length) status(`Copying ${name}: ${done} / ${files.length} files`);
+		if (++done % 50 === 0 || done === files.length) { status(`Copying ${name}: ${done} / ${files.length} files`); progress(done / files.length); }
 	}
-	console.debug(`${name}: ${files.length} files, ${copied} copied`);
 }
 
-// Only what the browser needs from each install (same rules as tools/serve.py).
+// Only what the browser needs from each install (same rules as tools/serve.py and tools/export-gamepack.sh).
 const SKIP_TML = new Set(["dotnet", "tModPorter", "ILLogs", "tModLoader-Logs", "DedicatedServerUtils", "EmptySteamDepot", "LaunchUtils"]);
 
-// The player picks their tModLoader and Terraria folders with <input webkitdirectory>.
-// (Not showDirectoryPicker: on Windows Chrome hides "dangerous" file types such as .dll from it.)
+// <input webkitdirectory> rather than showDirectoryPicker: on Windows Chrome hides "dangerous" types (.dll) from the latter.
 function filesFromInput(input, keep) {
 	return [...input.files].map((file) => {
 		const rel = file.webkitRelativePath.split("/").slice(1).join("/"); // drop the picked folder's own name
@@ -43,22 +71,67 @@ function filesFromInput(input, keep) {
 	}).filter((f) => keep(f.rel));
 }
 
-async function syncFromPicker(tmlInput, terrariaInput) {
+async function syncFromFolders(tmlInput, terrariaInput) {
 	const tml = filesFromInput(tmlInput, (rel) => !SKIP_TML.has(rel.split("/")[0]));
 	const content = filesFromInput(terrariaInput, (rel) => rel.startsWith("Content/"));
-	if (!tml.some((f) => f.rel === "tModLoader.dll")) throw new Error("That first folder isn't tModLoader (no tModLoader.dll inside). Pick steamapps\\common\\tModLoader.");
-	if (content.length === 0) throw new Error("That second folder isn't Terraria (no Content folder inside). Pick steamapps\\common\\Terraria.");
+	if (!tml.some((f) => f.rel === "tModLoader.dll")) throw new Error("The first folder isn't tModLoader (no tModLoader.dll inside). Pick steamapps\\common\\tModLoader.");
+	if (content.length === 0) throw new Error("The second folder isn't Terraria (no Content folder inside). Pick steamapps\\common\\Terraria.");
 	await syncInto("tModLoader", tml);
 	await syncInto("Terraria", content);
-	localStorage.setItem("tw-installed", "1");
 }
 
-// Dev only: copy from the local dev server (tools/serve.py) instead of the folder picker.
+// Game pack: an uncompressed ustar archive made by tools/export-gamepack.sh from the player's own install.
+// Streamed straight into OPFS (no 1 GB in memory).
+async function syncFromGamePack(file) {
+	const opfs = await navigator.storage.getDirectory();
+	const reader = file.stream().getReader();
+	let buf = new Uint8Array(0), consumed = 0, entries = 0;
+	const more = async () => {
+		const { value, done } = await reader.read();
+		if (done) return false;
+		const b = new Uint8Array(buf.length + value.length); b.set(buf); b.set(value, buf.length); buf = b;
+		return true;
+	};
+	const take = (n) => { const out = buf.subarray(0, n); buf = buf.subarray(n); consumed += n; return out; };
+	const str = (b) => new TextDecoder().decode(b).replace(/\0.*$/s, "");
+	let sawTml = false;
+	for (;;) {
+		while (buf.length < 512) if (!(await more())) throw new Error("Game pack ended early (file incomplete?)");
+		const h = take(512);
+		if (h.every((x) => x === 0)) break; // end-of-archive marker
+		const name = (str(h.subarray(345, 500)) ? str(h.subarray(345, 500)) + "/" : "") + str(h.subarray(0, 100));
+		const size = parseInt(str(h.subarray(124, 136)).trim() || "0", 8);
+		const type = String.fromCharCode(h[156] || 48);
+		const padded = Math.ceil(size / 512) * 512;
+		const top = name.split("/")[0];
+		let writable = null;
+		if (type === "0" && size >= 0 && (top === "tModLoader" || top === "Terraria")) {
+			const rel = name.split("/").slice(1).join("/");
+			if (top === "tModLoader" && rel === "tModLoader.dll") sawTml = true;
+			const dir = await dirFor(await opfs.getDirectoryHandle(top, { create: true }), rel, true);
+			const fname = rel.split("/").pop();
+			if (await sizeOf(dir, fname) !== size) writable = await (await dir.getFileHandle(fname, { create: true })).createWritable();
+		}
+		let left = padded, body = size;
+		while (left > 0) {
+			if (buf.length === 0 && !(await more())) throw new Error("Game pack ended early (file incomplete?)");
+			const chunk = take(Math.min(left, buf.length));
+			const useful = chunk.subarray(0, Math.max(0, Math.min(chunk.length, body)));
+			if (writable && useful.length) await writable.write(useful.slice());
+			body -= useful.length; left -= chunk.length;
+		}
+		if (writable) await writable.close();
+		if (++entries % 50 === 0) { status(`Unpacking game pack: ${entries} files`); progress(consumed / file.size); }
+	}
+	if (!sawTml) throw new Error("That file isn't a Terraria Web game pack (no tModLoader.dll inside).");
+}
+
+// Dev only: copy from the local dev server (tools/serve.py) instead of the pickers.
 async function syncFromDevServer(name) {
-	const list = (await (await fetch(`/dev-game/${name}/__list`)).text()).split("\n").filter(Boolean);
+	const list = (await (await fetch(`./dev-game/${name}/__list`)).text()).split("\n").filter(Boolean);
 	await syncInto(name, list.map((line) => {
 		const [size, rel] = line.split("\t");
-		return { rel, size: Number(size), open: async () => (await fetch(`/dev-game/${name}/${rel.split("/").map(encodeURIComponent).join("/")}`)).body };
+		return { rel, size: Number(size), open: async () => (await fetch(`./dev-game/${name}/${rel.split("/").map(encodeURIComponent).join("/")}`)).body };
 	}));
 }
 
@@ -71,41 +144,55 @@ async function haveGame() {
 	} catch { return false; }
 }
 
-if (params.has("dev")) {
-	await syncFromDevServer("tModLoader");
-	await syncFromDevServer("Terraria");
-} else if (!(await haveGame()) || params.has("reinstall")) {
-	const setup = document.getElementById("setup");
+async function runSetup() {
+	const setup = $("setup");
 	setup.hidden = false;
-	status("");
-	const tmlInput = document.getElementById("pick-tml"), terrariaInput = document.getElementById("pick-terraria");
-	const go = document.getElementById("go");
+	const tmlInput = $("pick-tml"), terrariaInput = $("pick-terraria"), packInput = $("pick-pack"), go = $("go");
 	const update = () => {
-		document.getElementById("tml-state").textContent = tmlInput.files.length ? `✓ ${tmlInput.files.length} files` : "";
-		document.getElementById("terraria-state").textContent = terrariaInput.files.length ? `✓ ${terrariaInput.files.length} files` : "";
+		$("tml-state").textContent = tmlInput.files.length ? `✓ ${tmlInput.files.length} files` : "";
+		$("terraria-state").textContent = terrariaInput.files.length ? `✓ ${terrariaInput.files.length} files` : "";
 		go.disabled = !(tmlInput.files.length && terrariaInput.files.length);
 	};
 	tmlInput.onchange = terrariaInput.onchange = update;
 	await new Promise((resolve) => {
-		go.onclick = async () => {
-			go.disabled = true;
-			try { await syncFromPicker(tmlInput, terrariaInput); setup.hidden = true; resolve(); }
-			catch (e) { status(e.message); go.disabled = false; }
+		const run = async (job) => {
+			go.disabled = true; setup.hidden = true;
+			try { await navigator.storage.persist?.(); await job(); resolve(); }
+			catch (e) { setup.hidden = false; $("setup-error").textContent = e.message; update(); }
 		};
+		go.onclick = () => run(() => syncFromFolders(tmlInput, terrariaInput));
+		packInput.onchange = () => packInput.files[0] && run(() => syncFromGamePack(packInput.files[0]));
 	});
 }
 
-status("Starting .NET...");
-const { dotnet } = await import("/_framework/dotnet.js");
+if (params.has("dev")) {
+	await syncFromDevServer("tModLoader");
+	await syncFromDevServer("Terraria");
+} else if (!(await haveGame()) || params.has("reinstall")) {
+	await runSetup();
+}
+
+status("Starting the engine...");
+progress(null);
+const { dotnet } = await import("./_framework/dotnet.js");
 const runtime = await dotnet.withConfig({}).create();
 const config = runtime.getConfig();
 const exports = await runtime.getAssemblyExports(config.mainAssemblyName);
-dotnet.instance.Module.canvas = document.getElementById("canvas");
+dotnet.instance.Module.canvas = $("canvas");
 self.wasm = { Module: dotnet.instance.Module, dotnet, runtime, config, exports };
 
 await runtime.runMain();
 await exports.Program.PreInit();
-status("Launching tModLoader...");
-setTimeout(() => document.getElementById("status")?.remove(), 1000);
-// Never resolves while the game runs: FNA hands the loop to the browser's frame loop.
-await exports.Program.Launch(params.get("args") ?? "");
+status("Loading tModLoader (this is the slow part)...");
+// Launch never resolves while the game runs: FNA hands the loop to the browser's frame loop.
+exports.Program.Launch(params.get("args") ?? "").catch((e) => {
+	status("The game crashed while starting: " + e.message + " (details in the browser console)");
+	$("loading").classList.add("failed");
+});
+const ready = setInterval(async () => {
+	if (await exports.Program.IsReady()) {
+		clearInterval(ready);
+		$("loading").hidden = true;
+		$("canvas").focus();
+	}
+}, 1000);

@@ -4,34 +4,71 @@
 		<title>Terraria Web</title>
 		<meta charset="UTF-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<meta name="description" content="Play your own copy of Terraria with tModLoader in the browser. No game files are hosted.">
 		<style>
-			html, body { margin: 0; height: 100%; background: #000; color: #ddd; font: 16px system-ui, sans-serif; overflow: hidden; }
-			canvas { display: block; width: 100%; height: 100%; }
-			#status { position: fixed; left: 16px; bottom: 16px; }
-			#setup { position: fixed; inset: 0; display: grid; place-items: center; background: #0b1020; }
-			#setup[hidden] { display: none; }
-			#setup div { max-width: 560px; padding: 24px; line-height: 1.5; }
-			#setup input[type=file] { display: none; }
-			.pick { display: inline-block; padding: 8px 14px; border-radius: 8px; background: #1e293b; cursor: pointer; }
-			#setup button:disabled { opacity: .4; cursor: default; }
-			#setup button { font: inherit; padding: 10px 18px; border-radius: 8px; border: 0; background: #3b82f6; color: #fff; cursor: pointer; }
+			:root { --bg: #0b1020; --panel: #121a33; --line: #26335c; --text: #e6e9f2; --dim: #9aa4c2; --accent: #4f8cff; --grass: #5fbf4a; }
+			* { box-sizing: border-box; }
+			html, body { margin: 0; height: 100%; background: #000; color: var(--text); font: 16px/1.5 system-ui, sans-serif; overflow: hidden; }
+			canvas { display: block; width: 100%; height: 100%; outline: none; }
 			code { background: #1e293b; padding: 1px 6px; border-radius: 4px; }
+			.screen { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; overflow: auto;
+				background: radial-gradient(ellipse at 50% 120%, #1d3b2a 0%, var(--bg) 55%); }
+			.screen[hidden] { display: none; }
+			.card { width: min(560px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 24px; }
+			h1 { margin: 0 0 4px; font-size: 28px; letter-spacing: .5px; }
+			h1 span { color: var(--grass); }
+			.dim { color: var(--dim); }
+			/* loading */
+			#load-stage { margin: 16px 0 8px; min-height: 3em; }
+			#load-bar-wrap { height: 8px; background: #0b1226; border-radius: 99px; overflow: hidden; }
+			#load-bar { height: 100%; width: 0; background: linear-gradient(90deg, var(--grass), var(--accent)); transition: width .3s; }
+			#load-bar-wrap.indeterminate #load-bar { width: 35%; animation: slide 1.4s ease-in-out infinite; }
+			@keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+			#load-meta { display: flex; justify-content: space-between; margin-top: 8px; font-size: 14px; }
+			#loading.failed #load-bar { background: #e5484d; width: 100%; animation: none; }
+			/* Ad slot: drop an ad unit (e.g. AdSense) inside this element. Keep it below the progress text. */
+			#ad-slot { margin-top: 20px; min-height: 250px; border: 1px dashed var(--line); border-radius: 10px;
+				display: grid; place-items: center; color: var(--dim); font-size: 13px; }
+			#ad-slot:not(:empty) { border: 0; }
+			/* setup */
+			.pick, button { display: inline-block; font: inherit; padding: 9px 16px; border-radius: 9px; border: 0; cursor: pointer; }
+			.pick { background: #1e293b; color: var(--text); }
+			button { background: var(--accent); color: #fff; }
+			button:disabled { opacity: .4; cursor: default; }
+			input[type=file] { display: none; }
+			#setup-error { color: #ff8a8a; }
+			hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
 		</style>
 		<script type="module" src="./main.js"></script>
 	</head>
 	<body>
 		<canvas id="canvas" class="canvas" tabindex="0"></canvas>
-		<section id="setup" hidden>
-			<div>
-				<h1>Terraria Web</h1>
-				<p>This site has no game files. It runs <b>your own</b> tModLoader and Terraria, installed with Steam.</p>
-				<p>Pick your two game folders. They are in Steam's <code>steamapps\common</code> folder (for example <code>C:\Program Files (x86)\Steam\steamapps\common</code>).</p>
-				<p>Chrome will ask to "upload" the files: they are only copied into this browser on your computer (about 1 GB, a few minutes, once). Nothing is sent anywhere.</p>
-				<p><label class="pick">1. Choose the <b>tModLoader</b> folder <input id="pick-tml" type="file" webkitdirectory></label> <span id="tml-state"></span></p>
-				<p><label class="pick">2. Choose the <b>Terraria</b> folder <input id="pick-terraria" type="file" webkitdirectory></label> <span id="terraria-state"></span></p>
-				<p><button id="go" disabled>Copy and play</button></p>
+
+		<section id="loading" class="screen">
+			<div class="card">
+				<h1>Terraria <span>Web</span></h1>
+				<div class="dim">Your own game, running in your browser.</div>
+				<div id="load-stage">Loading...</div>
+				<div id="load-bar-wrap" class="indeterminate"><div id="load-bar"></div></div>
+				<div id="load-meta"><span id="load-tip" class="dim"></span><span id="load-time" class="dim">0 s</span></div>
+				<div id="ad-slot">Ad space</div>
 			</div>
 		</section>
-		<div id="status">Loading...</div>
+
+		<section id="setup" class="screen" hidden>
+			<div class="card">
+				<h1>Terraria <span>Web</span></h1>
+				<p>This site has no game files. It runs <b>your own</b> tModLoader and Terraria. The game is copied into this browser once (about 1 GB, a few minutes) and never sent anywhere.</p>
+				<p class="dim">Chrome will say it is "uploading" files: it only copies them into this browser on your device.</p>
+				<p><b>On a PC with Steam:</b> pick both folders from <code>steamapps\common</code>.</p>
+				<p><label class="pick">1. tModLoader folder <input id="pick-tml" type="file" webkitdirectory></label> <span id="tml-state"></span></p>
+				<p><label class="pick">2. Terraria folder <input id="pick-terraria" type="file" webkitdirectory></label> <span id="terraria-state"></span></p>
+				<p><button id="go" disabled>Copy and play</button></p>
+				<hr>
+				<p><b>On a Chromebook or another device:</b> load the game pack you exported from your own PC.</p>
+				<p><label class="pick">Load game pack (.tar) <input id="pick-pack" type="file" accept=".tar"></label></p>
+				<p id="setup-error"></p>
+			</div>
+		</section>
 	</body>
 </html>

@@ -8,4 +8,5 @@ OUT=$HOME/tw/loader
 mkdir -p "$OUT"
 rsync -a --delete --exclude bin --exclude obj --exclude FNA --exclude statics "$REPO/src/loader/" "$OUT/"
 cd "$OUT"
+rm -rf bin/Release/net10.0/publish  # drop stale hashed files from earlier builds
 make build
