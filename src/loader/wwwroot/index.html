@@ -11,6 +11,9 @@
 			#setup { position: fixed; inset: 0; display: grid; place-items: center; background: #0b1020; }
 			#setup[hidden] { display: none; }
 			#setup div { max-width: 560px; padding: 24px; line-height: 1.5; }
+			#setup input[type=file] { display: none; }
+			.pick { display: inline-block; padding: 8px 14px; border-radius: 8px; background: #1e293b; cursor: pointer; }
+			#setup button:disabled { opacity: .4; cursor: default; }
 			#setup button { font: inherit; padding: 10px 18px; border-radius: 8px; border: 0; background: #3b82f6; color: #fff; cursor: pointer; }
 			code { background: #1e293b; padding: 1px 6px; border-radius: 4px; }
 		</style>
@@ -22,9 +25,11 @@
 			<div>
 				<h1>Terraria Web</h1>
 				<p>This site has no game files. It runs <b>your own</b> tModLoader and Terraria, installed with Steam.</p>
-				<p>Choose your Steam games folder, usually <code>C:\Program Files (x86)\Steam\steamapps\common</code>
-					(or <code>steamapps\common</code> in another Steam library). The game is copied into this browser once (about 1 GB, a few minutes).</p>
-				<p><button id="pick">Choose Steam games folder</button></p>
+				<p>Pick your two game folders. They are in Steam's <code>steamapps\common</code> folder (for example <code>C:\Program Files (x86)\Steam\steamapps\common</code>).</p>
+				<p>Chrome will ask to "upload" the files: they are only copied into this browser on your computer (about 1 GB, a few minutes, once). Nothing is sent anywhere.</p>
+				<p><label class="pick">1. Choose the <b>tModLoader</b> folder <input id="pick-tml" type="file" webkitdirectory></label> <span id="tml-state"></span></p>
+				<p><label class="pick">2. Choose the <b>Terraria</b> folder <input id="pick-terraria" type="file" webkitdirectory></label> <span id="terraria-state"></span></p>
+				<p><button id="go" disabled>Copy and play</button></p>
 			</div>
 		</section>
 		<div id="status">Loading...</div>

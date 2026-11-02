@@ -34,29 +34,22 @@ async function syncInto(name, files) {
 // Only what the browser needs from each install (same rules as tools/serve.py).
 const SKIP_TML = new Set(["dotnet", "tModPorter", "ILLogs", "tModLoader-Logs", "DedicatedServerUtils", "EmptySteamDepot", "LaunchUtils"]);
 
-async function listHandle(dirHandle, prefix = "", out = []) {
-	for await (const [n, h] of dirHandle.entries()) {
-		const rel = prefix + n;
-		if (h.kind === "directory") await listHandle(h, rel + "/", out);
-		else { const file = await h.getFile(); out.push({ rel, size: file.size, open: async () => file.stream() }); }
-	}
-	return out;
+// The player picks their tModLoader and Terraria folders with <input webkitdirectory>.
+// (Not showDirectoryPicker: on Windows Chrome hides "dangerous" file types such as .dll from it.)
+function filesFromInput(input, keep) {
+	return [...input.files].map((file) => {
+		const rel = file.webkitRelativePath.split("/").slice(1).join("/"); // drop the picked folder's own name
+		return { rel, size: file.size, open: async () => file.stream() };
+	}).filter((f) => keep(f.rel));
 }
 
-// The player picks their Steam "common" folder (it holds both tModLoader and Terraria).
-async function syncFromPicker() {
-	const common = await showDirectoryPicker({ id: "steam-common", mode: "read" });
-	let tml, terraria;
-	try { tml = await common.getDirectoryHandle("tModLoader"); terraria = await common.getDirectoryHandle("Terraria"); }
-	catch { throw new Error(`"${common.name}" doesn't contain both tModLoader and Terraria. Pick steamapps\\common.`); }
-	const tmlFiles = [];
-	for await (const [n, h] of tml.entries()) {
-		if (SKIP_TML.has(n)) continue;
-		if (h.kind === "directory") await listHandle(h, n + "/", tmlFiles);
-		else { const file = await h.getFile(); tmlFiles.push({ rel: n, size: file.size, open: async () => file.stream() }); }
-	}
-	await syncInto("tModLoader", tmlFiles);
-	await syncInto("Terraria", await listHandle(await terraria.getDirectoryHandle("Content"), "Content/"));
+async function syncFromPicker(tmlInput, terrariaInput) {
+	const tml = filesFromInput(tmlInput, (rel) => !SKIP_TML.has(rel.split("/")[0]));
+	const content = filesFromInput(terrariaInput, (rel) => rel.startsWith("Content/"));
+	if (!tml.some((f) => f.rel === "tModLoader.dll")) throw new Error("That first folder isn't tModLoader (no tModLoader.dll inside). Pick steamapps\\common\\tModLoader.");
+	if (content.length === 0) throw new Error("That second folder isn't Terraria (no Content folder inside). Pick steamapps\\common\\Terraria.");
+	await syncInto("tModLoader", tml);
+	await syncInto("Terraria", content);
 	localStorage.setItem("tw-installed", "1");
 }
 
@@ -85,10 +78,19 @@ if (params.has("dev")) {
 	const setup = document.getElementById("setup");
 	setup.hidden = false;
 	status("");
+	const tmlInput = document.getElementById("pick-tml"), terrariaInput = document.getElementById("pick-terraria");
+	const go = document.getElementById("go");
+	const update = () => {
+		document.getElementById("tml-state").textContent = tmlInput.files.length ? `✓ ${tmlInput.files.length} files` : "";
+		document.getElementById("terraria-state").textContent = terrariaInput.files.length ? `✓ ${terrariaInput.files.length} files` : "";
+		go.disabled = !(tmlInput.files.length && terrariaInput.files.length);
+	};
+	tmlInput.onchange = terrariaInput.onchange = update;
 	await new Promise((resolve) => {
-		document.getElementById("pick").onclick = async () => {
-			try { await syncFromPicker(); setup.hidden = true; resolve(); }
-			catch (e) { status(e.message); }
+		go.onclick = async () => {
+			go.disabled = true;
+			try { await syncFromPicker(tmlInput, terrariaInput); setup.hidden = true; resolve(); }
+			catch (e) { status(e.message); go.disabled = false; }
 		};
 	});
 }
