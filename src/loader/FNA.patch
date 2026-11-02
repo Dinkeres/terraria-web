@@ -1,9 +1,9 @@
 Submodule lib/SDL3-CS contains modified content
 diff --git a/lib/SDL3-CS/SDL3/SDL3.Legacy.cs b/lib/SDL3-CS/SDL3/SDL3.Legacy.cs
-index 338963f..c513257 100644
+index 5b5e453..c3b1a51 100644
 --- a/lib/SDL3-CS/SDL3/SDL3.Legacy.cs
 +++ b/lib/SDL3-CS/SDL3/SDL3.Legacy.cs
-@@ -2282,7 +2282,7 @@ namespace SDL3
+@@ -2385,7 +2385,7 @@ namespace SDL3
  		[DllImport(nativeLibName, CallingConvention = CallingConvention.Cdecl)]
  		public static extern IntPtr SDL_GetWindows(out int count);
  
@@ -12,7 +12,7 @@ index 338963f..c513257 100644
  		private static extern IntPtr INTERNAL_SDL_CreateWindow(byte* title, int w, int h, SDL_WindowFlags flags);
  		public static IntPtr SDL_CreateWindow(string title, int w, int h, SDL_WindowFlags flags)
  		{
-@@ -2311,7 +2311,7 @@ namespace SDL3
+@@ -2414,7 +2414,7 @@ namespace SDL3
  		[DllImport(nativeLibName, CallingConvention = CallingConvention.Cdecl)]
  		public static extern uint SDL_GetWindowProperties(IntPtr window);
  
@@ -21,3 +21,27 @@ index 338963f..c513257 100644
  		public static extern SDL_WindowFlags SDL_GetWindowFlags(IntPtr window);
  
  		[DllImport(nativeLibName, EntryPoint = "SDL_SetWindowTitle", CallingConvention = CallingConvention.Cdecl)]
+diff --git a/src/FNAPlatform/SDL3_FNAPlatform.cs b/src/FNAPlatform/SDL3_FNAPlatform.cs
+index 32e070b..4708603 100644
+--- a/src/FNAPlatform/SDL3_FNAPlatform.cs
++++ b/src/FNAPlatform/SDL3_FNAPlatform.cs
+@@ -1223,14 +1223,11 @@ namespace Microsoft.Xna.Framework
+ 		private static Game emscriptenGame;
+ 		private delegate void em_callback_func();
+ 
+-		[DllImport("__Native", CallingConvention = CallingConvention.Cdecl)]
+-		private static extern void emscripten_set_main_loop(
+-			em_callback_func func,
+-			int fps,
+-			int simulate_infinite_loop
+-		);
+-
+-		[DllImport("__Native", CallingConvention = CallingConvention.Cdecl)]
++		[DllImport("Emscripten", EntryPoint = "fna_set_main_loop", CallingConvention = CallingConvention.Cdecl)]
++		private static extern void fna_set_main_loop(em_callback_func func);
++		private static void emscripten_set_main_loop(em_callback_func func, int fps, int simulate_infinite_loop) => fna_set_main_loop(func);
++
++		[DllImport("Emscripten", EntryPoint = "fna_cancel_main_loop", CallingConvention = CallingConvention.Cdecl)]
+ 		private static extern void emscripten_cancel_main_loop();
+ 
+ 		[ObjCRuntime.MonoPInvokeCallback(typeof(em_callback_func))]

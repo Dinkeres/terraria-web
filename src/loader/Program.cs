@@ -128,6 +128,17 @@ partial class Program
         return Task.Delay(0);
     }
 
+    // Experiment: does FNA's emscripten main-loop handoff unwind out of Run() without running finally/Dispose?
+    [JSExport]
+    internal static Task RunBlocking()
+    {
+        Console.WriteLine("RunBlocking: calling game.Run() inside using/finally");
+        try { using (game) { game.Run(); } Console.WriteLine("AFTER RUN (returned normally)"); }
+        catch (Exception e) { Console.WriteLine("CAUGHT: " + e); }
+        finally { Console.WriteLine("FINALLY RAN"); }
+        return Task.CompletedTask;
+    }
+
     [JSExport]
     internal static Task<bool> Cleanup()
     {

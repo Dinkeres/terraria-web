@@ -49,3 +49,10 @@ world. If too slow, options in NEEDS_REVIEW.md.
 Start with **tModLoader** (already FNA + modern .NET, so no XNA→FNA relinking, and mods come
 later for free). Risks: it uses MonoMod detours at start-up (needs the wasm MonoMod port) and
 Steam checks (stub them). Fallback: vanilla Terraria.exe with XNA references redirected to FNA.
+
+## Game loop (verified 2026-11-02)
+
+The game calls `Game.Run()`, which never returns on desktop. In the browser FNA hands the loop to
+`emscripten_set_main_loop(..., simulate_infinite_loop=1)`, which unwinds the stack back to the
+browser; `finally` blocks and `using`/Dispose above it do not run. So tModLoader's own launcher
+(`MonoLaunch.Main` → `Program.LaunchGame` → `new Main().Run()`) can be called unmodified.

@@ -10,6 +10,7 @@ class CORSRequestHandler (SimpleHTTPRequestHandler):
     }
 
     def translate_path(self, path):
+        path = path.split("?", 1)[0].split("#", 1)[0]
         if path.startswith("/_framework"):
             return "bin/Release/net10.0/publish/wwwroot/_framework" + path[len("/_framework"):]
         else:

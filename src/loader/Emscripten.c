@@ -25,3 +25,9 @@ uint64_t SDL_GetWindowFlags(void *window);
 uint32_t SDL__GetWindowFlags(void *window) {
 	return (uint32_t)SDL_GetWindowFlags(window);
 }
+
+// FNA's emscripten main loop: .NET 10 wasm doesn't resolve DllImport("__Native"), so FNA (patched) calls these.
+// simulate_infinite_loop=1 unwinds the stack back to the browser, like a desktop Run() that never returns.
+typedef void (*fna_loop_cb)(void);
+void fna_set_main_loop(fna_loop_cb cb) { emscripten_set_main_loop(cb, 0, 1); }
+void fna_cancel_main_loop(void) { emscripten_cancel_main_loop(); }

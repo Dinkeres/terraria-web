@@ -35,6 +35,12 @@ console.debug("dotnet initialized");
 console.debug("Init...");
 await exports.Program.Init();
 
+if (location.search.includes("run")) {
+	console.debug("RunBlocking...");
+	try { await exports.Program.RunBlocking(); console.debug("RunBlocking returned to JS"); }
+	catch (e) { console.debug("RunBlocking threw to JS: " + e); }
+	await new Promise(() => {});
+}
 console.debug("MainLoop...");
 const main = async () => {
 	const ret = await exports.Program.MainLoop();
