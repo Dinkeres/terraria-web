@@ -1,0 +1,24 @@
+# Never commit the game: players supply their own Terraria / tModLoader.
+game/
+Terraria/
+tModLoader/
+*.xnb
+*.xwb
+*.xsb
+*.xgs
+*.wld
+*.plr
+Terraria.exe
+tModLoader.dll
+
+# build output and fetched third-party sources
+src/loader/FNA/
+src/loader/statics/
+src/loader/bin/
+src/loader/obj/
+node_modules/
+test-results/
+
+# test artifacts
+*.png
+!src/**/*.png
