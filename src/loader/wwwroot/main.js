@@ -3,6 +3,10 @@
 //   /libsdl/tModLoader/...        the player's tModLoader install
 //   /libsdl/Terraria/Content/...  the player's vanilla Terraria content
 const $ = (id) => document.getElementById(id);
+// Ads in natural breaks: our loading screen (#ad-slot) and while a world loads (#ad-break). Off until you have
+// an ad account; put its code in index.html and set this to true. window.kaisrariaAdBreak(kind) is called at
+// each break, for ad SDKs that want a call (e.g. Google H5 Games Ads adBreak()).
+const ADS_ENABLED = false;
 // Donation page (Ko-fi / GitHub Sponsors). Empty = the support link stays hidden.
 const SUPPORT_URL = "";
 if (SUPPORT_URL) { $("support").href = SUPPORT_URL; $("support").hidden = false; }
@@ -205,5 +209,19 @@ const ready = setInterval(async () => {
 		addEventListener("resize", () => { clearTimeout(fitTimer); fitTimer = setTimeout(fitToWindow, 250); });
 		$("loading").hidden = true;
 		$("canvas").focus();
+		watchBreaks();
 	}
 }, 1000);
+
+// Show the ad box while a world loads; hide it in menus and in the world (never over gameplay).
+function watchBreaks() {
+	if (!ADS_ENABLED) return;
+	let last = "menu";
+	setInterval(async () => {
+		const state = await exports.Program.GameState();
+		if (state === last) return;
+		$("ad-break").hidden = state !== "loading";
+		if (state === "loading") self.kaisrariaAdBreak?.("world-loading");
+		last = state;
+	}, 1000);
+}

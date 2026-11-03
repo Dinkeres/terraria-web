@@ -1,0 +1,5 @@
+# Kaisraria at a Cloudflare address (_worker.js), same pattern as mcbrowser.
+# Deploy: wrangler deploy (from this folder). The site itself is the GitHub Pages build (tools/deploy-pages.sh).
+name = "kaisraria"
+main = "_worker.js"
+compatibility_date = "2025-10-01"

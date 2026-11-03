@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
 	<head>
-		<title>Terraria Web</title>
+		<title>Kaisraria</title>
 		<meta charset="UTF-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		<meta name="description" content="Play your own copy of Terraria with tModLoader in the browser. No game files are hosted.">
+		<meta name="description" content="Kaisraria: play your own copy of Terraria with tModLoader in the browser. No game files are hosted.">
 		<style>
 			:root { --bg: #0b1020; --panel: #121a33; --line: #26335c; --text: #e6e9f2; --dim: #9aa4c2; --accent: #4f8cff; --grass: #5fbf4a; }
 			* { box-sizing: border-box; }
@@ -39,6 +39,8 @@
 			#setup-error { color: #ff8a8a; }
 			.legal { font-size: 12px; margin: 14px 0 0; }
 			.legal a { color: var(--grass); margin-left: 6px; }
+			#ad-break { position: fixed; right: 16px; bottom: 16px; width: 336px; min-height: 280px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+			#ad-break[hidden] { display: none; }
 			hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
 		</style>
 		<script type="module" src="./main.js"></script>
@@ -48,8 +50,8 @@
 
 		<section id="loading" class="screen">
 			<div class="card">
-				<h1>Terraria <span>Web</span></h1>
-				<div class="dim">Your own game, running in your browser.</div>
+				<h1>Kais<span>raria</span></h1>
+				<div class="dim">Plays your own Terraria + tModLoader, right in your browser.</div>
 				<div id="load-stage">Loading...</div>
 				<div id="load-bar-wrap" class="indeterminate"><div id="load-bar"></div></div>
 				<div id="load-meta"><span id="load-tip" class="dim"></span><span id="load-time" class="dim">0 s</span></div>
@@ -59,9 +61,12 @@
 			</div>
 		</section>
 
+		<!-- Ad box shown only while a world loads (ADS_ENABLED in main.js). Put the ad unit inside. -->
+		<aside id="ad-break" hidden></aside>
+
 		<section id="setup" class="screen" hidden>
 			<div class="card">
-				<h1>Terraria <span>Web</span></h1>
+				<h1>Kais<span>raria</span></h1>
 				<p>This site has no game files. It runs <b>your own</b> tModLoader and Terraria. The game is copied into this browser once (about 1 GB, a few minutes) and never sent anywhere.</p>
 				<p class="dim">Chrome will say it is "uploading" files: it only copies them into this browser on your device.</p>
 				<p><b>On a PC with Steam:</b> pick both folders from <code>steamapps\common</code>.</p>

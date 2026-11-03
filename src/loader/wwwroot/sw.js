@@ -2,7 +2,7 @@
 // (1) adds COOP/COEP so the page is cross-origin isolated on hosts that can't set headers (GitHub Pages);
 //     .NET threads need SharedArrayBuffer;
 // (2) caches the engine (_framework, hashed file names = immutable) so later visits start faster.
-const VERSION = "terraria-web-1";
+const VERSION = "kaisraria-1";
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));

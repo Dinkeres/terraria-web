@@ -1,6 +1,8 @@
-# Terraria Web
+# Kaisraria
 
-Play **your own** copy of Terraria (via tModLoader) in the browser: https://dinkeres.github.io/terraria-web/
+Play **your own** copy of Terraria (via tModLoader) in the browser:
+https://kaisraria.luvrookie1.workers.dev (also https://dinkeres.github.io/terraria-web/).
+Not affiliated with or endorsed by Re-Logic. Terraria® is a trademark of Re-Logic.
 
 The site contains no game files. On first visit you either pick your `tModLoader` and `Terraria` folders
 (from Steam's `steamapps\common`), or load a game pack made from your own install with

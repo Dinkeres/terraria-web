@@ -33,7 +33,13 @@ static class Patches
             // Return true without setting SteamAvailable, so Steam features stay off quietly.
             Stub(m, "Terraria.Social.Steam.SteamedWraps", "TryInitViaGameServer", returnTrue: true);
         },
-        ["ReLogic"] = Common,
+        ["ReLogic"] = m =>
+        {
+            Common(m);
+            // The asset loader asserts Monitor.IsEntered(_requestLock); in the AOT+interpreter mix that check can
+            // report false while the lock is held. Shim says yes, but logs the thread so a real misuse shows up.
+            RedirectCalls(m, (type, name) => (type, name) == ("System.Threading.Monitor", "IsEntered") ? typeof(Shim).GetMethod(nameof(Shim.MonitorIsEntered)) : null);
+        },
     };
 
     static void Common(ModuleDefinition m)
@@ -166,6 +172,13 @@ public static class Shim
     public static readonly System.Collections.Concurrent.ConcurrentDictionary<System.Reflection.Assembly, string> Paths = new();
     public static string Location(System.Reflection.Assembly a) => Paths.TryGetValue(a, out var p) ? p : a.Location;
     public static bool True() => true;
+    static int monitorWarned;
+    public static bool MonitorIsEntered(object o)
+    {
+        if (!System.Threading.Monitor.IsEntered(o) && System.Threading.Interlocked.Exchange(ref monitorWarned, 1) == 0)
+            Console.WriteLine($"[shim] Monitor.IsEntered said false on thread {Environment.CurrentManagedThreadId} ({System.Threading.Thread.CurrentThread.Name}); treating as held");
+        return true;
+    }
 
     // Same overload as Directory.EnumerateFiles(string, string, SearchOption). Cached only for the game install
     // folders (immutable until the player re-copies them); saves, mods and config are always listed live.

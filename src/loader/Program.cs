@@ -56,6 +56,24 @@ partial class Program
         return Task.CompletedTask;
     }
 
+    // Polled by the page: "starting" (our loading screen), "menu", "loading" (a world is loading or being
+    // created: a natural break, used for the ad box) or "world".
+    [JSExport]
+    internal static Task<string> GameState()
+    {
+        const BindingFlags S = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+        try
+        {
+            if (terrariaMain == null || terrariaMain.GetField("showSplash", S)?.GetValue(null) is not false) return Task.FromResult("starting");
+            if (terrariaMain.GetField("gameMenu", S)?.GetValue(null) is false) return Task.FromResult("world");
+            var menuMode = terrariaMain.GetField("menuMode", S)?.GetValue(null) as int?;
+            var ui = terrariaMain.GetField("MenuUI", S)?.GetValue(null);
+            var state = ui?.GetType().GetProperty("CurrentState")?.GetValue(ui)?.GetType().Name ?? "";
+            return Task.FromResult(menuMode == 10 || state.Contains("WorldLoad") ? "loading" : "menu");
+        }
+        catch { return Task.FromResult("menu"); }
+    }
+
     // Polled by the loading screen: true once Terraria has finished its own splash/loading.
     [JSExport]
     internal static Task<bool> IsReady() => Task.FromResult(
