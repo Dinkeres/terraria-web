@@ -56,6 +56,45 @@ partial class Program
         return Task.CompletedTask;
     }
 
+    // Auto quality: called every few seconds while in a world. If Terraria's own frame rate stays low, step down
+    // once per step: color lighting -> retro lighting, then the parallax background off. Returns what changed.
+    static int lowSamples, tuneStep;
+    [JSExport]
+    internal static Task<string> AutoTune()
+    {
+        const BindingFlags S = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+        try
+        {
+            var fps = terrariaMain?.GetField("frameRate", S)?.GetValue(null) as int? ?? 60;
+            lowSamples = fps < 45 ? lowSamples + 1 : 0;
+            if (lowSamples < 3) return Task.FromResult("");
+            lowSamples = 0;
+            var tml = terrariaMain.Assembly;
+            if (tuneStep == 0)
+            {
+                tuneStep = 1;
+                var mode = tml.GetType("Terraria.Lighting")?.GetProperty("Mode", S);
+                if (mode != null && mode.GetValue(null)?.ToString() is "Color" or "White")
+                {
+                    mode.SetValue(null, Enum.Parse(mode.PropertyType, "Retro"));
+                    return Task.FromResult($"Running at {fps} fps: switched lighting to Retro for speed");
+                }
+            }
+            if (tuneStep == 1)
+            {
+                tuneStep = 2;
+                var bg = terrariaMain.GetField("BackgroundEnabled", S);
+                if (bg?.GetValue(null) is true)
+                {
+                    bg.SetValue(null, false);
+                    return Task.FromResult($"Running at {fps} fps: turned off the background for speed");
+                }
+            }
+        }
+        catch (Exception e) { Console.Error.WriteLine("AutoTune: " + e.Message); }
+        return Task.FromResult("");
+    }
+
     // Polled by the page: "starting" (our loading screen), "menu", "loading" (a world is loading or being
     // created: a natural break, used for the ad box) or "world".
     [JSExport]

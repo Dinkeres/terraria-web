@@ -201,7 +201,12 @@ exports.Program.Launch(params.get("args") ?? "").catch((e) => {
 // Render at the window's real size (CSS pixels; the canvas is scaled crisply on high-DPI screens).
 // Terraria's minimum window is 800x600.
 let fitTimer;
-const fitToWindow = () => exports.Program.Resize(Math.max(800, innerWidth), Math.max(600, innerHeight));
+// Terraria's minimum is 800x720; on smaller windows render a bit larger with the window's proportions and let
+// the browser scale it down (never stretched).
+const fitToWindow = () => {
+	const w = Math.max(1, innerWidth), h = Math.max(1, innerHeight), s = Math.max(1, 800 / w, 720 / h);
+	return exports.Program.Resize(Math.round(w * s), Math.round(h * s));
+};
 const ready = setInterval(async () => {
 	if (await exports.Program.IsReady()) {
 		clearInterval(ready);
@@ -210,8 +215,29 @@ const ready = setInterval(async () => {
 		$("loading").hidden = true;
 		$("canvas").focus();
 		watchBreaks();
+		autoQuality();
 	}
 }, 1000);
+
+// While in a world, let the game lower its own settings if this device can't keep up (see Program.AutoTune).
+function autoQuality() {
+	if (params.has("noautotune")) return;
+	let inWorldSince = 0; // frame rate always dips while a world finishes loading: give it 15 s
+	setInterval(async () => {
+		if (await exports.Program.GameState() !== "world") { inWorldSince = 0; return; }
+		inWorldSince ||= performance.now();
+		if (performance.now() - inWorldSince < 15000) return;
+		const note = await exports.Program.AutoTune();
+		if (note) toast(note);
+	}, 5000);
+}
+
+function toast(text) {
+	const t = $("toast");
+	console.debug("[toast] " + text);
+	t.textContent = text; t.hidden = false;
+	clearTimeout(t._timer); t._timer = setTimeout(() => { t.hidden = true; }, 5000);
+}
 
 // Show the ad box while a world loads; hide it in menus and in the world (never over gameplay).
 function watchBreaks() {

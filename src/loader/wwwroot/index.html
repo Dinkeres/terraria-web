@@ -41,6 +41,8 @@
 			.legal a { color: var(--grass); margin-left: 6px; }
 			#ad-break { position: fixed; right: 16px; bottom: 16px; width: 336px; min-height: 280px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
 			#ad-break[hidden] { display: none; }
+			#toast { position: fixed; left: 50%; top: 16px; transform: translateX(-50%); background: #000c; color: var(--text); padding: 8px 14px; border-radius: 8px; font-size: 14px; pointer-events: none; }
+			#toast[hidden] { display: none; }
 			hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
 		</style>
 		<script type="module" src="./main.js"></script>
@@ -63,6 +65,7 @@
 
 		<!-- Ad box shown only while a world loads (ADS_ENABLED in main.js). Put the ad unit inside. -->
 		<aside id="ad-break" hidden></aside>
+		<div id="toast" hidden></div>
 
 		<section id="setup" class="screen" hidden>
 			<div class="card">

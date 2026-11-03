@@ -12,6 +12,7 @@
 		     game assemblies are loaded later and stay interpreted. AOT requires the trimmer; see TwRootEverything. -->
 		<RunAOTCompilation Condition="'$(TwAot)' == 'true'">true</RunAOTCompilation>
 		<PublishTrimmed Condition="'$(TwAot)' == 'true'">true</PublishTrimmed>
+		<DefineConstants Condition="'$(TwAot)' == 'true'">$(DefineConstants);TW_AOT</DefineConstants>
 
 		<NoWarn>IL2026,IL2046,IL2057,IL2062,IL2065,IL2067,IL2070,IL2072,IL2075,IL2087,IL2090</NoWarn>
 		<NoWarn>$(NoWarn),SYSLIB0011,CS0169,CS0219,CS0649,CS8981,CA2022</NoWarn>
@@ -24,7 +25,10 @@
 		<WasmAllowUndefinedSymbols>true</WasmAllowUndefinedSymbols>
 		<WasmBitcodeCompileOptimizationFlag>-O3</WasmBitcodeCompileOptimizationFlag>
 		<WasmNativeStrip>true</WasmNativeStrip>
-		<WasmStripILAfterAOT>true</WasmStripILAfterAOT>
+		<!-- Keep IL after AOT: the game (loaded later, interpreted) instantiates framework generics (async state
+		     machines, collections over its own types) that were never precompiled; the interpreter needs their IL.
+		     With it stripped, Mono asserts (interp.c "couldn't compile wrapper") on the first such call. -->
+		<WasmStripILAfterAOT>false</WasmStripILAfterAOT>
 		<WasmNativeDebugSymbols>false</WasmNativeDebugSymbols>
 
 		<EmccExtraLDFlags>-sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2 -sFULL_ES2 -sFULL_ES3 -sWASMFS -sOFFSCREENCANVAS_SUPPORT</EmccExtraLDFlags>

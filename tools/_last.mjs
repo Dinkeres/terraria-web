@@ -1,0 +1,13 @@
+import { chromium } from "playwright";
+const ctx = await chromium.launchPersistentContext(".pw-profile", { viewport: { width: 1280, height: 720 }, args: ["--use-angle=d3d11", "--enable-gpu", "--ignore-gpu-blocklist"] });
+const page = ctx.pages()[0] ?? await ctx.newPage();
+const all = [];
+page.on("console", (m) => { all.push(m.text().slice(0, 300)); });
+await page.goto(process.argv[2]);
+await page.waitForSelector("#loading", { state: "hidden", timeout: 500000 });
+await page.waitForTimeout(3000);
+const n = all.length;
+page.mouse.move(640, 300).catch(() => {});
+await new Promise((r) => setTimeout(r, 4000));
+for (const l of all.slice(n).filter((l) => !/^\s+at /.test(l)).slice(0, 25)) console.log(l);
+await ctx.close().catch(() => {}); process.exit(0);

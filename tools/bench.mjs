@@ -7,7 +7,7 @@ const ctx = await chromium.launchPersistentContext(".pw-profile", { viewport: { 
 const page = ctx.pages()[0] ?? await ctx.newPage();
 const t0 = Date.now(), sec = () => ((Date.now() - t0) / 1000).toFixed(1);
 const watch = [];
-page.on("console", (m) => { const t = m.text(); if (t.includes("[watch]")) watch.push(t); if (/Patched|Launch failed|FATAL/.test(t)) console.log(sec(), t.slice(0, 120)); });
+page.on("console", (m) => { const t = m.text(); if (t.includes("[watch]")) watch.push(t); if (/Patched|Launch failed|FATAL|[toast]/.test(t)) console.log(sec(), t.slice(0, 120)); });
 await page.goto(url);
 await page.waitForSelector("#loading", { state: "hidden", timeout: 600000 });
 console.log(sec(), "MENU READY");
@@ -18,7 +18,7 @@ const tw = Date.now();
 while (!watch.some((l) => l.includes("gameMenu=False")) && Date.now() - tw < 300000) await page.waitForTimeout(500);
 console.log(sec(), "IN WORLD after", ((Date.now() - tw) / 1000).toFixed(1), "s");
 watch.length = 0;
-await page.waitForTimeout(20000);
+await page.waitForTimeout(+(process.env.WORLD_SECS ?? 20) * 1000);
 await page.screenshot({ path: process.env.SHOT ?? "bench.png" });
 const ups = watch.map((l) => +(/updatesCountedForFPS=(\d+)/.exec(l)?.[1] ?? 0)).filter((n) => n > 0);
 console.log("in-world updates/s samples:", ups.join(" "), "| avg", (ups.reduce((a, b) => a + b, 0) / ups.length).toFixed(1));
