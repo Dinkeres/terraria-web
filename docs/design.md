@@ -90,3 +90,15 @@ origin, so no backend change is needed. One visit = one Terraria TCP connection.
 - Friend: patched TcpSocket over the visit WebSocket. Joining = clicking the host in the friends list.
 - Risks: two .NET instances ≈ 2× memory (Chromebooks with 4 GB will struggle); server tick speed in the
   interpreter.
+
+## AOT (ahead-of-time) findings, 2026-11-03
+
+`TW_AOT=1 tools/build.sh` builds with RunAOTCompilation (trimmer with every assembly rooted).
+- Fixed: SDL window-flag width mismatch (FNA.patch) -> "function signature mismatch" at window creation.
+- Result: menu in ~55 s instead of ~90 s.
+- Blocker: Mono aborts with `interp.c:3420` (couldn't compile an interp-entry wrapper) as soon as
+  precompiled framework code on a **thread-pool thread** calls into the interpreted game (tasks,
+  async asset loads, mod loading). Not caused by IL stripping; forcing immediate asset loads only moves
+  the crash; leaving the framework interpreted is impossible (the runtime needs its AOT wrappers).
+- Next step if revisited: a custom-built Mono runtime with assert messages on, to name the missing
+  wrapper signatures and pre-generate them (or a runtime fix).
