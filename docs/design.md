@@ -76,3 +76,17 @@ Speed plan, in order of expected gain:
 
 Known gaps: MonoMod detours (mods with hooks — Calamity needs these), multiplayer sockets,
 opening URLs/folders, music/sound not yet verified, startup time (~90 s to menu).
+
+## Co-op plan (Stage 4, with the Horizon friends system)
+
+The accounts worker (horizon-test) already has friends, presence ("hosting"), invite-only mode and
+**visits**: a visitor's WebSocket and the host's `/tunnel` WebSocket are relayed byte-for-byte by the
+worker (`web/backend/src/social.js` visit/tunnel). https://dinkeres.github.io is already an allowed
+origin, so no backend change is needed. One visit = one Terraria TCP connection.
+
+- Host: the page runs the player's client plus a **tModLoader dedicated server** (same files, `-server`)
+  in a hidden same-origin frame. The server's TcpListener/TcpSocket are patched to a JS-fed listener;
+  the local client connects over a MessageChannel, friends arrive as `visitor` tunnels.
+- Friend: patched TcpSocket over the visit WebSocket. Joining = clicking the host in the friends list.
+- Risks: two .NET instances ≈ 2× memory (Chromebooks with 4 GB will struggle); server tick speed in the
+  interpreter.

@@ -37,6 +37,8 @@
 			button:disabled { opacity: .4; cursor: default; }
 			input[type=file] { display: none; }
 			#setup-error { color: #ff8a8a; }
+			.legal { font-size: 12px; margin: 14px 0 0; }
+			.legal a { color: var(--grass); margin-left: 6px; }
 			hr { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
 		</style>
 		<script type="module" src="./main.js"></script>
@@ -52,6 +54,8 @@
 				<div id="load-bar-wrap" class="indeterminate"><div id="load-bar"></div></div>
 				<div id="load-meta"><span id="load-tip" class="dim"></span><span id="load-time" class="dim">0 s</span></div>
 				<div id="ad-slot">Ad space</div>
+				<p class="legal dim">Not affiliated with or endorsed by Re-Logic. Terraria® is a trademark of Re-Logic. Requires your own copy of Terraria and tModLoader.
+					<a id="support" hidden target="_blank" rel="noopener">♥ Support this project</a></p>
 			</div>
 		</section>
 
@@ -68,6 +72,7 @@
 				<p><b>On a Chromebook or another device:</b> load the game pack you exported from your own PC.</p>
 				<p><label class="pick">Load game pack (.tar) <input id="pick-pack" type="file" accept=".tar"></label></p>
 				<p id="setup-error"></p>
+				<p class="legal dim">Not affiliated with or endorsed by Re-Logic. Terraria® is a trademark of Re-Logic. This site hosts no game files.</p>
 			</div>
 		</section>
 	</body>

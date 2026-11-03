@@ -3,6 +3,9 @@
 //   /libsdl/tModLoader/...        the player's tModLoader install
 //   /libsdl/Terraria/Content/...  the player's vanilla Terraria content
 const $ = (id) => document.getElementById(id);
+// Donation page (Ko-fi / GitHub Sponsors). Empty = the support link stays hidden.
+const SUPPORT_URL = "";
+if (SUPPORT_URL) { $("support").href = SUPPORT_URL; $("support").hidden = false; }
 const params = new URLSearchParams(location.search);
 const status = (t) => { $("load-stage").textContent = t; console.debug("[status] " + t); };
 const progress = (frac) => { $("load-bar").style.width = frac == null ? "" : `${Math.round(frac * 100)}%`; $("load-bar-wrap").classList.toggle("indeterminate", frac == null); };
