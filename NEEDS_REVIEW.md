@@ -11,3 +11,10 @@
    other players (browser safety rule) — if a friend hits that, we add a "pick each folder" option.
 4. **Hosting.** Not hosted anywhere yet. Hosting needs COOP/COEP headers (GitHub Pages via a
    service worker like Kaiser, or the Cloudflare account). Ask before publishing.
+5. **Ads.** The loading screen has an empty `#ad-slot` box (in `src/loader/wwwroot/index.html`). To show
+   ads you need an ad account (e.g. Google AdSense: sign-up and site approval are yours to do; AdSense
+   usually wants a custom domain rather than a github.io subfolder). Paste the ad code into that box.
+   Ads load from other sites, so they must be allowed by the page's cross-origin isolation (COEP); test
+   after adding, some ad scripts may need `credentialless` mode.
+6. **Game pack.** `C:\Users\luvro\Downloads\terraria-web-gamepack.tar` is your own game, for your own
+   devices only. Don't upload or share it (that would be distributing Terraria).

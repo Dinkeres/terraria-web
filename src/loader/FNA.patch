@@ -1,3 +1,4 @@
+1
 diff --git a/FNA.Core.csproj b/FNA.Core.csproj
 index 8fb1b52..1800825 100644
 --- a/FNA.Core.csproj
@@ -13,27 +14,39 @@ index 8fb1b52..1800825 100644
  		<Compile Include="src\Graphics\GraphicsDeviceStatus.cs" />
 Submodule lib/SDL3-CS contains modified content
 diff --git a/lib/SDL3-CS/SDL3/SDL3.Legacy.cs b/lib/SDL3-CS/SDL3/SDL3.Legacy.cs
-index 5b5e453..c3b1a51 100644
+index 5b5e453..f555a29 100644
 --- a/lib/SDL3-CS/SDL3/SDL3.Legacy.cs
 +++ b/lib/SDL3-CS/SDL3/SDL3.Legacy.cs
-@@ -2385,7 +2385,7 @@ namespace SDL3
+@@ -2385,12 +2385,14 @@ namespace SDL3
  		[DllImport(nativeLibName, CallingConvention = CallingConvention.Cdecl)]
  		public static extern IntPtr SDL_GetWindows(out int count);
  
 -		[DllImport(nativeLibName, EntryPoint = "SDL_CreateWindow", CallingConvention = CallingConvention.Cdecl)]
+-		private static extern IntPtr INTERNAL_SDL_CreateWindow(byte* title, int w, int h, SDL_WindowFlags flags);
 +		[DllImport(nativeLibName, EntryPoint = "SDL__CreateWindow", CallingConvention = CallingConvention.Cdecl)]
- 		private static extern IntPtr INTERNAL_SDL_CreateWindow(byte* title, int w, int h, SDL_WindowFlags flags);
++		// Terraria Web: the C wrapper (Emscripten.c) takes 32-bit flags; declare them as uint so the interpreter
++		// and AOT agree with it (an enum : ulong here is passed as i64 by AOT -> "function signature mismatch").
++		private static extern IntPtr INTERNAL_SDL_CreateWindow(byte* title, int w, int h, uint flags);
  		public static IntPtr SDL_CreateWindow(string title, int w, int h, SDL_WindowFlags flags)
  		{
-@@ -2414,7 +2414,7 @@ namespace SDL3
+ 			var titleUTF8 = EncodeAsUTF8(title);
+-			var result = INTERNAL_SDL_CreateWindow(titleUTF8, w, h, flags);
++			var result = INTERNAL_SDL_CreateWindow(titleUTF8, w, h, (uint) flags);
+ 
+ 			SDL_free((IntPtr) titleUTF8);
+ 			return result;
+@@ -2414,8 +2416,9 @@ namespace SDL3
  		[DllImport(nativeLibName, CallingConvention = CallingConvention.Cdecl)]
  		public static extern uint SDL_GetWindowProperties(IntPtr window);
  
 -		[DllImport(nativeLibName, CallingConvention = CallingConvention.Cdecl)]
+-		public static extern SDL_WindowFlags SDL_GetWindowFlags(IntPtr window);
 +		[DllImport(nativeLibName, EntryPoint = "SDL__GetWindowFlags", CallingConvention = CallingConvention.Cdecl)]
- 		public static extern SDL_WindowFlags SDL_GetWindowFlags(IntPtr window);
++		private static extern uint INTERNAL_SDL_GetWindowFlags(IntPtr window); // 32-bit, see INTERNAL_SDL_CreateWindow
++		public static SDL_WindowFlags SDL_GetWindowFlags(IntPtr window) => (SDL_WindowFlags) INTERNAL_SDL_GetWindowFlags(window);
  
  		[DllImport(nativeLibName, EntryPoint = "SDL_SetWindowTitle", CallingConvention = CallingConvention.Cdecl)]
+ 		private static extern SDLBool INTERNAL_SDL_SetWindowTitle(IntPtr window, byte* title);
 diff --git a/src/Audio/SoundEffectInstance.cs b/src/Audio/SoundEffectInstance.cs
 index 7524eb6..555f67e 100644
 --- a/src/Audio/SoundEffectInstance.cs
