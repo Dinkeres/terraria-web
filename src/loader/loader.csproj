@@ -5,10 +5,13 @@
 		<EnableUnsafeBinaryFormatterSerialization>true</EnableUnsafeBinaryFormatterSerialization>
 		<Nullable>disable</Nullable>
 
-		<!--<RunAOTCompilation>true</RunAOTCompilation>-->
 		<CompressionEnabled>false</CompressionEnabled>
 		<TrimMode>partial</TrimMode>
 		<PublishTrimmed>false</PublishTrimmed>
+		<!-- AOT (build with -p:TwAot=true): compiles OUR code, FNA and the .NET libraries to wasm. The player's
+		     game assemblies are loaded later and stay interpreted. AOT requires the trimmer; see TwRootEverything. -->
+		<RunAOTCompilation Condition="'$(TwAot)' == 'true'">true</RunAOTCompilation>
+		<PublishTrimmed Condition="'$(TwAot)' == 'true'">true</PublishTrimmed>
 
 		<NoWarn>IL2026,IL2046,IL2057,IL2062,IL2065,IL2067,IL2070,IL2072,IL2075,IL2087,IL2090</NoWarn>
 		<NoWarn>$(NoWarn),SYSLIB0011,CS0169,CS0219,CS0649,CS8981,CA2022</NoWarn>
@@ -52,5 +55,12 @@
 		<Content Remove=".\FNA\**" />
 		<EmbeddedResource Remove=".\FNA\**" />
 	</ItemGroup>
+	<!-- tModLoader (loaded later) uses framework APIs our loader never touches: root every assembly so the
+	     trimmer removes nothing. -->
+	<Target Name="TwRootEverything" BeforeTargets="PrepareForILLink" Condition="'$(TwAot)' == 'true'">
+		<ItemGroup>
+			<TrimmerRootAssembly Include="@(ManagedAssemblyToLink->'%(Filename)')" />
+		</ItemGroup>
+	</Target>
 </Project>
 

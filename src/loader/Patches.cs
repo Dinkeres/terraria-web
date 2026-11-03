@@ -56,6 +56,9 @@ static class Patches
             ("System.Diagnostics.Process", "get_Id") => shim.GetMethod(nameof(Shim.ProcessId)),
             // No synchronous AES in browser .NET; Terraria encrypts .plr/achievements with RijndaelManaged.
             ("System.Security.Cryptography.RijndaelManaged", ".ctor") => typeof(ManagedAes).GetMethod(nameof(ManagedAes.Create)),
+            // Listing ~15k content files in OPFS takes tens of seconds at every start; cache listings of the
+            // read-only game folders (see Shim.EnumerateFiles).
+            ("System.IO.Directory", "EnumerateFiles") => shim.GetMethod(nameof(Shim.EnumerateFiles)),
             // Only SDL3 is linked in the browser build; see Sdl2Shim.
             ("SDL2.SDL", _) => typeof(Sdl2Shim).GetMethod(name)
                 ?? throw new Exception($"patch: Sdl2Shim.{name} missing (add it)"),
@@ -145,6 +148,8 @@ static class Patches
                     if (!cache.TryGetValue(key, out var target))
                         cache[key] = target = pick(key.Item1, key.Item2) is { } mi ? m.ImportReference(mi) : null;
                     if (target == null) continue;
+                    // only the overload with the same arguments (+ "this" for instance calls)
+                    if (target.Parameters.Count != r.Parameters.Count + (r.HasThis && ins.OpCode != OpCodes.Newobj ? 1 : 0)) continue;
                     if (isCall) ins.OpCode = OpCodes.Call; // ldftn (method group -> delegate) keeps its opcode
                     ins.Operand = target;
                     counts[key.Item1 + "." + key.Item2] = counts.GetValueOrDefault(key.Item1 + "." + key.Item2) + 1;
@@ -161,6 +166,26 @@ public static class Shim
     public static readonly System.Collections.Concurrent.ConcurrentDictionary<System.Reflection.Assembly, string> Paths = new();
     public static string Location(System.Reflection.Assembly a) => Paths.TryGetValue(a, out var p) ? p : a.Location;
     public static bool True() => true;
+
+    // Same overload as Directory.EnumerateFiles(string, string, SearchOption). Cached only for the game install
+    // folders (immutable until the player re-copies them); saves, mods and config are always listed live.
+    public static IEnumerable<string> EnumerateFiles(string path, string pattern, System.IO.SearchOption option)
+    {
+        var full = System.IO.Path.GetFullPath(path);
+        if (!full.StartsWith("/tModLoader/") && !full.StartsWith("/Terraria/"))
+            return System.IO.Directory.EnumerateFiles(path, pattern, option);
+        var key = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes($"{full}|{pattern}|{option}")))[..16];
+        var file = $"{Program.CacheDir}/dir-{key}.txt";
+        if (System.IO.File.Exists(file))
+        {
+            // stored relative to 'full'; rebuild with the caller's spelling of 'path'
+            return System.IO.File.ReadAllLines(file).Select(rel => System.IO.Path.Combine(path, rel)).ToArray();
+        }
+        var list = System.IO.Directory.EnumerateFiles(path, pattern, option).ToArray();
+        System.IO.Directory.CreateDirectory(Program.CacheDir);
+        System.IO.File.WriteAllLines(file, list.Select(p => System.IO.Path.GetRelativePath(path, p)));
+        return list;
+    }
     public static System.Diagnostics.Process CurrentProcess() => null; // only used with the shims below
     public static System.Diagnostics.Process[] NoProcesses() => Array.Empty<System.Diagnostics.Process>();
     public static long ProcessMemory(System.Diagnostics.Process p) => GC.GetTotalMemory(false);

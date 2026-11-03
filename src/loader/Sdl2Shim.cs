@@ -26,7 +26,8 @@ public static class Sdl2Shim
     {
         mode = default;
         if (display != 0 || modeIndex != 0) return -1; // one display, one mode (callers loop until failure)
-        mode.w = 1920; mode.h = 1080; mode.refresh_rate = 60;
+        // Terraria caps window sizes at the display mode; report a big one, the page sets the real size.
+        mode.w = 3840; mode.h = 2160; mode.refresh_rate = 60;
         return 0;
     }
 

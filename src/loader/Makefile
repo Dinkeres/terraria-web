@@ -15,7 +15,7 @@ clean:
 	rm -rvf statics obj bin FNA || true
 
 build: statics FNA
-	dotnet publish -c Release -v d
+	dotnet publish -c Release -v n $(PUBLISH_ARGS)
 	# fix mono init with -sWASMFS enabled
 	sed -i 's/FS_createPath("\/","usr\/share",!0,!0)/FS_createPath("\/usr","share",!0,!0)/' bin/Release/net10.0/publish/wwwroot/_framework/dotnet.runtime.*.js
 	# automatically force transfer of canvas matching selector `.canvas` (class canvas) to deputy thread (c# managed main thread)

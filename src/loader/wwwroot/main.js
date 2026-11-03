@@ -12,7 +12,7 @@ const progress = (frac) => { $("load-bar").style.width = frac == null ? "" : `${
 if (!crossOriginIsolated && "serviceWorker" in navigator && !params.has("nosw")) {
 	await navigator.serviceWorker.register("./sw.js");
 	if (!navigator.serviceWorker.controller) {
-		if (!sessionStorage.getItem("tw-sw-reload")) { sessionStorage.setItem("tw-sw-reload", "1"); location.reload(); }
+		if (!sessionStorage.getItem("tw-sw-reload")) { sessionStorage.setItem("tw-sw-reload", "1"); location.reload(); await new Promise(() => {}); }
 	}
 }
 if (!crossOriginIsolated) {
@@ -47,6 +47,7 @@ async function sizeOf(dir, name) {
 // Copy files [{rel, size, open() -> ReadableStream}] into OPFS/<name>, skipping ones already there with the same size.
 async function syncInto(name, files) {
 	const opfs = await navigator.storage.getDirectory();
+	await opfs.removeEntry("Cache", { recursive: true }).catch(() => {}); // loader caches depend on these files
 	const top = await opfs.getDirectoryHandle(name, { create: true });
 	let done = 0;
 	for (const f of files) {
@@ -84,6 +85,7 @@ async function syncFromFolders(tmlInput, terrariaInput) {
 // Streamed straight into OPFS (no 1 GB in memory).
 async function syncFromGamePack(file) {
 	const opfs = await navigator.storage.getDirectory();
+	await opfs.removeEntry("Cache", { recursive: true }).catch(() => {});
 	const reader = file.stream().getReader();
 	let buf = new Uint8Array(0), consumed = 0, entries = 0;
 	const more = async () => {
@@ -189,9 +191,15 @@ exports.Program.Launch(params.get("args") ?? "").catch((e) => {
 	status("The game crashed while starting: " + e.message + " (details in the browser console)");
 	$("loading").classList.add("failed");
 });
+// Render at the window's real size (CSS pixels; the canvas is scaled crisply on high-DPI screens).
+// Terraria's minimum window is 800x600.
+let fitTimer;
+const fitToWindow = () => exports.Program.Resize(Math.max(800, innerWidth), Math.max(600, innerHeight));
 const ready = setInterval(async () => {
 	if (await exports.Program.IsReady()) {
 		clearInterval(ready);
+		if (!params.has("noresize")) fitToWindow();
+		addEventListener("resize", () => { clearTimeout(fitTimer); fitTimer = setTimeout(fitToWindow, 250); });
 		$("loading").hidden = true;
 		$("canvas").focus();
 	}

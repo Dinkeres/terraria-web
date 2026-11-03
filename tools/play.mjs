@@ -8,7 +8,7 @@ const [url, out, stepsJson = "[]"] = process.argv.slice(2);
 mkdirSync(out, { recursive: true });
 const ctx = await chromium.launchPersistentContext(".pw-profile", {
 	viewport: { width: 1280, height: 720 },
-	args: process.env.GPU ? ["--use-angle=d3d11", "--enable-gpu", "--ignore-gpu-blocklist", "--enable-unsafe-webgpu"] : ["--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"],
+	args: process.env.GPU || true ? ["--use-angle=d3d11", "--enable-gpu", "--ignore-gpu-blocklist", "--enable-unsafe-webgpu"] : ["--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"],
 });
 const page = ctx.pages()[0] ?? await ctx.newPage();
 const t0 = Date.now();
@@ -23,7 +23,7 @@ async function waitLog(re, secs) {
 	return false;
 }
 await page.goto(url);
-await waitLog(process.env.WAITRE ?? "showSplash=False", 400); // needs ?args=-watch; menu takes input once the splash ends
+await page.waitForSelector("#loading", { state: "hidden", timeout: 600000 }); // loading screen clears when the menu takes input
 await page.bringToFront();
 await page.evaluate(() => { document.getElementById("canvas").focus(); window.dispatchEvent(new FocusEvent("focus")); });
 for (const s of JSON.parse(stepsJson)) {

@@ -20,6 +20,9 @@ partial class Program
     // WASMFS getcwd() drops the /libsdl mount prefix, so game paths live at /tModLoader and /Terraria
     // (symlinks into OPFS); that keeps relative paths like ../Terraria/Content working.
     const string TmlDir = "/tModLoader";
+    // Loader caches (patched assemblies, directory listings of the read-only game folders). The setup page
+    // deletes it whenever game files are (re)copied.
+    internal const string CacheDir = Root + "/Cache";
 
     private static void Main() => Console.WriteLine("Terraria Web loader ready");
 
@@ -42,6 +45,16 @@ partial class Program
 
     static Dictionary<string, string> libraryIndex;
     static Type terrariaMain;
+
+    // Called by the page (on the game thread, between frames) to match the game's resolution to the browser
+    // window, so it isn't drawn at 800x720 and stretched. Uses Terraria's own windowed SetDisplayMode.
+    [JSExport]
+    internal static Task Resize(int width, int height)
+    {
+        try { terrariaMain?.GetMethod("SetDisplayMode", BindingFlags.Static | BindingFlags.Public)?.Invoke(null, new object[] { width, height, false }); }
+        catch (Exception e) { Console.Error.WriteLine("Resize failed: " + (e.InnerException ?? e).Message); }
+        return Task.CompletedTask;
+    }
 
     // Polled by the loading screen: true once Terraria has finished its own splash/loading.
     [JSExport]
@@ -123,15 +136,29 @@ partial class Program
             return AssemblyLoadContext.Default.LoadFromAssemblyPath(path);
         patch ??= _ => { };
 
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        using var module = ModuleDefinition.ReadModule(path, new ReaderParameters { AssemblyResolver = resolver, InMemory = true });
-        patch(module);
-        if (Environment.GetEnvironmentVariable("TW_TRACE") is { Length: > 0 } trace) Patches.Trace(module, trace.Split(','));
-        using var ms = new MemoryStream();
-        module.Write(ms);
-        Console.WriteLine($"Patched {name} in {sw.ElapsedMilliseconds} ms");
-        ms.Position = 0;
-        var asm = AssemblyLoadContext.Default.LoadFromStream(ms);
+        // Patching tModLoader takes ~5 s; keep the result. Key: input file + this loader build (patch changes).
+        var info = new FileInfo(path);
+        var cacheFile = $"{CacheDir}/{name}-{info.Length}-{info.LastWriteTimeUtc.Ticks}-{typeof(Program).Assembly.ManifestModule.ModuleVersionId:N}.dll";
+        byte[] bytes = null;
+        if (!traced && File.Exists(cacheFile)) bytes = File.ReadAllBytes(cacheFile);
+        else
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            using var module = ModuleDefinition.ReadModule(path, new ReaderParameters { AssemblyResolver = resolver, InMemory = true });
+            patch(module);
+            if (Environment.GetEnvironmentVariable("TW_TRACE") is { Length: > 0 } trace) Patches.Trace(module, trace.Split(','));
+            using var ms = new MemoryStream();
+            module.Write(ms);
+            bytes = ms.ToArray();
+            Console.WriteLine($"Patched {name} in {sw.ElapsedMilliseconds} ms");
+            if (!traced)
+            {
+                Directory.CreateDirectory(CacheDir);
+                foreach (var old in Directory.GetFiles(CacheDir, name + "-*.dll")) File.Delete(old);
+                File.WriteAllBytes(cacheFile, bytes);
+            }
+        }
+        var asm = AssemblyLoadContext.Default.LoadFromStream(new MemoryStream(bytes));
         Shim.Paths[asm] = path;
         return asm;
     }

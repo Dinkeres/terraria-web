@@ -4,9 +4,9 @@
 set -euo pipefail
 export PATH=$HOME/.dotnet:$PATH DOTNET_CLI_TELEMETRY_OPTOUT=1
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-OUT=$HOME/tw/loader
+OUT=${TW_BUILD_DIR:-$HOME/tw/loader}   # TW_BUILD_DIR: build elsewhere (e.g. an AOT experiment)
 mkdir -p "$OUT"
 rsync -a --delete --exclude bin --exclude obj --exclude FNA --exclude statics "$REPO/src/loader/" "$OUT/"
 cd "$OUT"
 rm -rf bin/Release/net10.0/publish  # drop stale hashed files from earlier builds
-make build
+make build PUBLISH_ARGS="${TW_AOT:+-p:TwAot=true}"   # TW_AOT=1: ahead-of-time compile (slow build, faster game)
