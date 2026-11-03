@@ -36,12 +36,10 @@ static class Patches
         ["ReLogic"] = m =>
         {
             Common(m);
-            // The asset loader asserts Monitor.IsEntered(_requestLock); in the AOT+interpreter mix that check can
-            // report false while the lock is held. Shim says yes, but logs the thread so a real misuse shows up.
+            // The asset loader asserts Monitor.IsEntered(_requestLock). In the browser that check reports false
+            // while the lock is held (seen on the main thread, interpreter and AOT alike), the assert throws and
+            // the asset never loads (e.g. the player's body: only the hair was drawn). Shim says yes, logs once.
             RedirectCalls(m, (type, name) => (type, name) == ("System.Threading.Monitor", "IsEntered") ? typeof(Shim).GetMethod(nameof(Shim.MonitorIsEntered)) : null);
-#if TW_AOT
-            ForceImmediateAssetLoads(m);
-#endif
         },
     };
 
@@ -94,25 +92,6 @@ static class Patches
             }
             il.Emit(OpCodes.Ret);
         }
-    }
-
-    // AOT build only: background (AsyncLoad) asset loads await on a thread-pool thread, where precompiled
-    // framework async code has to call back into the interpreted game's state machines; Mono has no precompiled
-    // bridge for those and aborts (interp.c:3420 "couldn't compile wrapper"). Load immediately instead (Terraria
-    // supports it; at worst a tiny hitch when a texture is first used).
-    static void ForceImmediateAssetLoads(ModuleDefinition m)
-    {
-        const int ImmediateLoad = 1, AsyncLoad = 2; // ReLogic.Content.AssetRequestMode
-        var request = m.GetType("ReLogic.Content.AssetRepository").Methods.Single(x => x.Name == "Request" && x.Parameters.Count == 2);
-        var mode = request.Parameters[1];
-        var il = request.Body.GetILProcessor();
-        var first = request.Body.Instructions[0];
-        il.InsertBefore(first, il.Create(OpCodes.Ldarg, mode));
-        il.InsertBefore(first, il.Create(OpCodes.Ldc_I4, AsyncLoad));
-        il.InsertBefore(first, il.Create(OpCodes.Bne_Un, first));
-        il.InsertBefore(first, il.Create(OpCodes.Ldc_I4, ImmediateLoad));
-        il.InsertBefore(first, il.Create(OpCodes.Starg, mode));
-        Console.WriteLine("patch ReLogic: AssetRepository.Request AsyncLoad -> ImmediateLoad");
     }
 
     static void RetypeLocals(ModuleDefinition m, string from, Type to)

@@ -1,0 +1,14 @@
+import { chromium } from "playwright";
+const ctx = await chromium.launchPersistentContext(".pw-profile", { viewport: { width: 1280, height: 720 }, args: ["--use-angle=d3d11", "--enable-gpu", "--ignore-gpu-blocklist"] });
+const page = ctx.pages()[0] ?? await ctx.newPage();
+const watch = []; page.on("console", (m) => { if (m.text().includes("[watch]")) watch.push(m.text()); });
+await page.goto("http://localhost:5000/?args=-watch&noautotune");
+await page.waitForSelector("#loading", { state: "hidden", timeout: 400000 });
+await page.waitForTimeout(3000);
+const mm = () => watch.at(-1)?.match(/menuMode=(\d+)/)?.[1];
+console.log("before: menuMode", mm());
+await page.mouse.move(640, 248); await page.waitForTimeout(300); await page.mouse.down(); await page.waitForTimeout(400); await page.mouse.up();
+await page.waitForTimeout(3000);
+console.log("after long click: menuMode", mm());
+await page.screenshot({ path: process.argv[2] });
+await ctx.close();

@@ -184,7 +184,10 @@ if (params.has("dev")) {
 status("Starting the engine...");
 progress(null);
 const { dotnet } = await import("./_framework/dotnet.js");
-const runtime = await dotnet.withConfig({}).create();
+// ?jit: force the jiterpreter (the interpreter's run-time compiler for hot code) fully on; ?jitstats logs its stats.
+const runtimeOptions = params.has("jit") ? ["--jiterpreter-traces-enabled", "--jiterpreter-interp-entry-enabled", "--jiterpreter-jit-call-enabled", "--jiterpreter-backward-branch-entries-enabled"] : [];
+if (params.has("jitstats")) runtimeOptions.push("--jiterpreter-stats-enabled");
+const runtime = await dotnet.withConfig({ runtimeOptions }).create();
 const config = runtime.getConfig();
 const exports = await runtime.getAssemblyExports(config.mainAssemblyName);
 dotnet.instance.Module.canvas = $("canvas");
@@ -207,17 +210,19 @@ const fitToWindow = () => {
 	const w = Math.max(1, innerWidth), h = Math.max(1, innerHeight), s = Math.max(1, 800 / w, 720 / h);
 	return exports.Program.Resize(Math.round(w * s), Math.round(h * s));
 };
-const ready = setInterval(async () => {
+// Poll one at a time (calls queued while the game is busy would all arrive at once).
+for (;;) {
+	await new Promise((r) => setTimeout(r, 500));
 	if (await exports.Program.IsReady()) {
-		clearInterval(ready);
 		if (!params.has("noresize")) fitToWindow();
 		addEventListener("resize", () => { clearTimeout(fitTimer); fitTimer = setTimeout(fitToWindow, 250); });
 		$("loading").hidden = true;
 		$("canvas").focus();
 		watchBreaks();
 		autoQuality();
+		break;
 	}
-}, 1000);
+}
 
 // While in a world, let the game lower its own settings if this device can't keep up (see Program.AutoTune).
 function autoQuality() {

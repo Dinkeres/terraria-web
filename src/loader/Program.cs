@@ -113,10 +113,23 @@ partial class Program
         catch { return Task.FromResult("menu"); }
     }
 
-    // Polled by the loading screen: true once Terraria has finished its own splash/loading.
+    // Polled by the loading screen. Ready = Terraria's splash is over AND tModLoader isn't loading mods (its
+    // loading screen ignores clicks), continuously for 2 s (mod loading starts a moment after the splash ends;
+    // wall-clock time, because polls queued while the game was busy can arrive back to back).
+    static System.Diagnostics.Stopwatch readyFor;
     [JSExport]
-    internal static Task<bool> IsReady() => Task.FromResult(
-        terrariaMain?.GetField("showSplash", BindingFlags.Static | BindingFlags.Public)?.GetValue(null) is false);
+    internal static Task<bool> IsReady()
+    {
+        const BindingFlags S = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+        var splashDone = terrariaMain?.GetField("showSplash", S)?.GetValue(null) is false;
+        var modsLoading = terrariaMain?.Assembly.GetType("Terraria.ModLoader.ModLoader")?.GetField("isLoading", S)?.GetValue(null) is true;
+        // ...and its "Loading mods" screen has closed (it lingers a moment after isLoading clears)
+        var ui = terrariaMain?.GetField("MenuUI", S)?.GetValue(null);
+        modsLoading |= (ui?.GetType().GetProperty("CurrentState")?.GetValue(ui)?.GetType().Name ?? "").Contains("LoadMods");
+        if (!splashDone || modsLoading) readyFor = null;
+        else readyFor ??= System.Diagnostics.Stopwatch.StartNew();
+        return Task.FromResult(readyFor?.ElapsedMilliseconds >= 2000);
+    }
     static RefResolver resolver;
 
     [JSExport]
@@ -278,7 +291,7 @@ partial class Program
             while (true)
             {
                 System.Threading.Thread.Sleep(1000);
-                try { var prog = tml.GetType("Terraria.Program"); Console.WriteLine("[watch] LoadedEverything=" + prog.GetField("LoadedEverything", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(null) + " LoadedPercentage=" + prog.GetField("LoadedPercentage", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(null) + " " + string.Join(" ", names.Select(n => n + "=" + main.GetField(n, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(null)))); }
+                try { var prog = tml.GetType("Terraria.Program"); var mui = main.GetField("MenuUI", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(null); var uiState = mui?.GetType().GetProperty("CurrentState")?.GetValue(mui)?.GetType().Name; Console.WriteLine("[watch] ui=" + uiState + " LoadedEverything=" + prog.GetField("LoadedEverything", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(null) + " LoadedPercentage=" + prog.GetField("LoadedPercentage", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(null) + " " + string.Join(" ", names.Select(n => n + "=" + main.GetField(n, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(null)))); }
                 catch (Exception e) { Console.WriteLine("[watch] " + e.Message); }
             }
         }) { IsBackground = true }.Start();

@@ -1,0 +1,12 @@
+import { chromium } from "playwright";
+const ctx = await chromium.launchPersistentContext(".pw-profile", { viewport: { width: 1280, height: 720 }, args: ["--use-angle=d3d11", "--enable-gpu", "--ignore-gpu-blocklist"] });
+const page = ctx.pages()[0] ?? await ctx.newPage();
+const errs = []; page.on("console", (m) => { const t = m.text(); if (/ERROR|FATAL|Exception:|\[watch\]/.test(t)) errs.push(t.slice(0, 230)); });
+await page.goto("http://localhost:5000/?args=-watch");
+await page.waitForTimeout(150000);
+await page.evaluate(() => { document.getElementById("loading").hidden = true; });
+await page.waitForTimeout(1000);
+await page.screenshot({ path: process.argv[2] });
+console.log(errs.filter((l) => !l.includes("[watch]")).slice(0, 8).join("\n"));
+console.log(errs.filter((l) => l.includes("[watch]")).at(-1)?.match(/menuMode=\d+|showSplash=\w+/g)?.join(" "));
+await ctx.close();
